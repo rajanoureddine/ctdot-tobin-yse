@@ -1,6 +1,4 @@
-# auto_strategies_env (conda; not pyblp 0.13)
-# ase_blp_1_0 (conda; pyblp 1.0)
-# or ev_env (up-to-date pyblp; lives in SW_Automaker_Strategies folder)
+# Packages to import
 import numpy as np
 import pandas as pd
 #import censusdata
@@ -10,17 +8,18 @@ import time
 import os
 import pickle
 import sys
+import pathlib
 from scipy.optimize import minimize
 
 from linearmodels.iv import IV2SLS # this is to check IV results
-#from stargazer.stargazer import Stargazer
 
 from functions import * # this is the set of additional functions
 
 pyblp.options.verbose = True
 
 # determine whether this is running on the cluster
-bln_cluster = check_cluster()
+bln_cluster = False
+
 # implement parallelization
 parallel = True
 if (bln_cluster):
@@ -45,10 +44,10 @@ print("nodes: "+ str(n_nodes_par))
 #version = 'South Atlantic'
 #version = 'Middle Atlantic'
 #version = 'New England'
-#version = 'state'
-version = 'hybrid' # ZEV states + a few others are each treated as separate market
+# version = 'state'
+# version = 'hybrid' # ZEV states + a few others are each treated as separate market
 #version = 'hybrid/regional' # ZEV states + others grouped into census divisions
-#version = 'national'
+version = 'national'
 print('version: '+version)
 print(pyblp.__version__)
 
@@ -101,17 +100,21 @@ print_split(split)
 #####################
 # set up directories#
 #####################
-if bln_cluster: 
-    str_project = ''     
-    output_folder = 'outputs'
-    # set number of nodes for parallelized run
-    if (parallel):
-        n_nodes = int(os.getenv("SLURM_CPUS_PER_TASK"))
-        print(str(n_nodes)+' nodes for parallelization.')
-else:
-    str_project = '~/Dropbox (YSE)/SW_Automaker_Strategies/'
-    output_folder = '../../results'
-str_data = 'data/'
+#if bln_cluster: 
+#    str_project = ''     
+#    output_folder = 'outputs'
+#    # set number of nodes for parallelized run
+#    if (parallel):
+#        n_nodes = int(os.getenv("SLURM_CPUS_PER_TASK"))
+#        print(str(n_nodes)+' nodes for parallelization.')
+#else:
+#   str_project = '~/Dropbox (YSE)/SW_Automaker_Strategies/'
+#   output_folder = '../../results'
+# Set paths - Raja 
+cd = pathlib.Path().resolve().parent
+str_project = cd / "Documents" 
+str_data = "tobin_working_data"
+output_folder = str_project / str_data / "outputs"
 
 ##########################
 # read in and clean data #
@@ -128,10 +131,10 @@ census_data = haircut_interpolate_census(str_project,str_data,census_data,incl_2
 # read in agent observations if needed
 # Interesting file - many rows of simulated agents from different states, presumably they are based on the 
 # known distribution of income, households, etc. for each state
-agent_data = read_agent_data(str_project,str_data,model,version,n_agent,incl_2021,bln_rescale_income,bln_truncate_income)
+# agent_data = read_agent_data(str_project,str_data,model,version,n_agent,incl_2021,bln_rescale_income,bln_truncate_income)
 
 # rename moments if needed
-dict_moments = read_moments(str_project,str_data,split,bln_rescale_income)
+# dict_moments = read_moments(str_project,str_data,split,bln_rescale_income)
 
 # merge vin and census data
 # Note - this is the point at which we create the market data that is used later on
@@ -151,7 +154,7 @@ mkt_data = calc_outside_good(mkt_data,version)
 mkt_data = generate_pyblp_instruments(mkt_data)
 
 # if single state, keep only relevant market data, agent data
-mkt_data,agent_data = subset_states(mkt_data,agent_data,version)
+# mkt_data,agent_data = subset_states(mkt_data,agent_data,version)
 
 # define three time periods
 if(False):
@@ -169,7 +172,7 @@ if(False):
     mkt_data.loc[mkt_data.model_year.isin([2018,2019,2020,2021]),'alt_t2'] = 1
 
 # if only running subset of years (adjust mkt_data, agent_data, moments)
-mkt_data,agent_data,dict_moments,yr_keep = subset_years(mkt_data,agent_data,model,split,dict_moments)
+# mkt_data,agent_data,dict_moments,yr_keep = subset_years(mkt_data,agent_data,model,split,dict_moments)
 
 ####################
 # run PyBLP models #
@@ -177,8 +180,10 @@ mkt_data,agent_data,dict_moments,yr_keep = subset_years(mkt_data,agent_data,mode
 mkt_data_keep = mkt_data.copy()
 if model == 'logit':
     # run logit with corrected prices
-    logit_formulation = pyblp.Formulation('0 + prices + dollar_per_mile + electric + phev + electric:CA + phev:CA + hybrid + diesel + log_hp_weight + wheelbase + doors + range_elec + range_elec:CA + C(make) + C(drivetype) + C(bodytype)')
-    
+    # logit_formulation = pyblp.Formulation('0 + prices + dollar_per_mile + electric + phev + electric:CA + phev:CA + hybrid + diesel + log_hp_weight + wheelbase + doors + range_elec + range_elec:CA + C(make) + C(drivetype) + C(bodytype)')
+    # Updated to get rid of CA for national
+    logit_formulation = pyblp.Formulation('0 + prices + dollar_per_mile + electric + phev + hybrid + diesel + log_hp_weight + wheelbase + doors + range_elec + C(make) + C(drivetype) + C(bodytype)')
+
     problem = pyblp.Problem(logit_formulation, mkt_data)
     logit_results_price_updated = problem.solve()
 
@@ -197,6 +202,7 @@ if model == 'logit':
     #df_logit[df_logit["param"].str.contains('fast_per_tsm')]
     results = logit_results_price_updated
     integration = None
+
 if model == 'rc':  
     # run random coefficients logit withOUT demographics
     #X1_formulation = pyblp.Formulation('0 + prices + dollar_per_mile:ice + '+str_time+ str_ev + str_phev + str_charger +'range_elec:electric + range_elec:phev + hybrid + diesel + log_hp_weight + wheelbase + doors + C(make) + C(drivetype) + C(bodytype)')
@@ -873,7 +879,7 @@ if model == 'DGV':
 ################
 if save:
     str_time = time.strftime("%Y_%m_%d_%H%M",time.localtime())
-    str_results_folder = output_folder+ '/demand_results/results_'+version+'_'+str_time+'/'
+    str_results_folder = output_folder / 'demand_results/results_' / version/'_'/str_time
     print(str_results_folder)
     if not os.path.exists(str_results_folder):
         os.makedirs(str_results_folder)
@@ -884,7 +890,7 @@ if save:
         else:
             version_name = '_state_vehicle_'
     if model == 'logit':
-        df_logit.to_csv(str_results_folder+'demand_params.csv',index = False)
+        df_logit.to_csv(str_results_folder/'demand_params.csv',index = False)
     elif model == 'nested_logit':
         df_nl.to_csv(str_results_folder+'demand_params.csv',index=False)
     elif model == 'rc':

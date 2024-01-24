@@ -1529,9 +1529,9 @@ def read_vin_data(str_project,str_data,version,dynamic):
     #str_vin_data = str_project + 'data/intermediate/CA_VIN_data_common.csv'
     if version == 'state' or version in state_names or version in region_names:
         if dynamic:
-            str_vin_data = str_project + str_data + 'intermediate/dynamic_US_VIN_data_common.csv'
+            str_vin_data = str_project / str_data / 'intermediate/dynamic_US_VIN_data_common.csv'
         else:
-            str_vin_data = str_project + str_data + 'intermediate/US_VIN_data_common.csv'
+            str_vin_data = str_project / str_data / 'intermediate/US_VIN_data_common.csv'
     elif version == 'hybrid':
         if dynamic:
             str_vin_data = str_project + str_data + 'intermediate/dynamic_US_VIN_data_common_ZEV_other_agg_states.csv'
@@ -1546,7 +1546,7 @@ def read_vin_data(str_project,str_data,version,dynamic):
         if dynamic:
             print('This data is not yet put together')
         else:
-            str_vin_data = str_project + str_data + 'intermediate/agg_US_VIN_data_common.csv'
+            str_vin_data = str_project / str_data / 'intermediate/agg_US_VIN_data_common.csv'
     elif 'county' in version:
         str_vin_data = str_project + str_data + 'intermediate/CA_county_VIN_data.csv'
 
@@ -1561,14 +1561,14 @@ def read_census_data(str_project,str_data,version):
     elif 'county' in version:
         str_census = str_project + str_data + 'raw/census_pop_California_county.csv'
     else:
-        str_census = str_project + str_data + 'raw/census_pop_state.csv'
+        str_census = str_project / str_data / 'raw/census_pop_state.csv'
     census_data = pd.read_csv(str_census)
     if 'county' not in version:
         census_data.state = census_data.state.str.upper()
     return census_data
 
 def haircut_interpolate_census(str_project,str_data,census_data,incl_2021):
-    str_haircut_mkt = str_project + str_data + 'intermediate/haircut_market_size.csv'
+    str_haircut_mkt = str_project / str_data / 'intermediate/haircut_market_size.csv'
     haircut_param = pd.read_csv(str_haircut_mkt)
     early_param = float(haircut_param.loc[haircut_param.type == 'early','val'])
     late_param = float(haircut_param.loc[haircut_param.type == 'late','val'])
@@ -1725,6 +1725,7 @@ def merge_vin_census(vin_data,census_data,version,dynamic):
         # sum census data to national level
         census_data_natl = census_data[['tot_HH','model_year']].groupby(['model_year']).sum().reset_index()
         mkt_data = pd.merge(vin_data,census_data_natl,how='left',on='model_year')
+
     return mkt_data
 
 def clean_market_data(mkt_data,version):
@@ -1766,8 +1767,7 @@ def clean_market_data(mkt_data,version):
         mkt_data['market_ids'] = mkt_data.model_year.astype(str)+mkt_data.state
     mkt_data['prices'] = mkt_data.msrp
 
-    # define t
-    mkt_data['time_trend'] = mkt_data.model_year - 2013
+    # mkt_data['time_trend'] = mkt_data.model_year - 2013
 
     # define ice indicator
     mkt_data['ice'] = 1
@@ -1785,14 +1785,15 @@ def clean_market_data(mkt_data,version):
     mkt_data['clustering_ids'] = mkt_data.product_ids
 
     # set prices = price - subsidy
-    mkt_data.prices = mkt_data.msrp - mkt_data.fed_tax_credit - mkt_data.rebate
+    mkt_data.prices = mkt_data.msrp - mkt_data.fed_tax_credit
+   # mkt_data.prices = mkt_data.msrp - mkt_data.fed_tax_credit - mkt_data.rebate
 
     # add indicator for CA, other ZEV states
-    if ('CALIFORNIA' in mkt_data.state.unique()):
-        mkt_data['CA']= 0
-        mkt_data.loc[mkt_data.state == 'CALIFORNIA', 'CA']= 1
-        mkt_data['zev_nonCA'] = 0
-        mkt_data.loc[(mkt_data.state != 'CALIFORNIA') & (mkt_data.zev == 1), 'zev_nonCA'] = 1
+    #if ('CALIFORNIA' in mkt_data.state.unique()):
+    #    mkt_data['CA']= 0
+    #    mkt_data.loc[mkt_data.state == 'CALIFORNIA', 'CA']= 1
+        # mkt_data['zev_nonCA'] = 0
+        # mkt_data.loc[(mkt_data.state != 'CALIFORNIA') & (mkt_data.zev == 1), 'zev_nonCA'] = 1
 
     return mkt_data
 
@@ -1814,8 +1815,8 @@ def calc_outside_good(mkt_data,version):
 
 def generate_pyblp_instruments(mkt_data):
     # generate instruments at national level!
-    instrument_data = mkt_data[['product_ids','firm_ids','model_year','wheelbase','curbwt','doors','log_hp_weight','drivetype','bodytype','wages']].drop_duplicates().reset_index(drop=True)
-    instrument_data['market_ids'] =  instrument_data.model_year
+    instrument_data = mkt_data[['product_ids','firm_ids','market_ids','wheelbase','curbwt','doors','log_hp_weight','drivetype','bodytype','wages']].drop_duplicates().reset_index(drop=True)
+    # instrument_data['market_ids'] =  instrument_data.model_year
 
     # original BLP instruments
     if(False):
