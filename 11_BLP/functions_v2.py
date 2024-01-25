@@ -1815,8 +1815,8 @@ def calc_outside_good(mkt_data,version):
 
 def generate_pyblp_instruments(mkt_data):
     # generate instruments at national level!
-    instrument_data = mkt_data[['product_ids','firm_ids','market_ids','wheelbase','curbwt','doors','log_hp_weight','drivetype','bodytype','wages']].drop_duplicates().reset_index(drop=True)
-    # instrument_data['market_ids'] =  instrument_data.model_year
+    instrument_data = mkt_data[['product_ids','firm_ids','model_year','wheelbase','curbwt','doors','log_hp_weight','drivetype','bodytype','wages']].drop_duplicates().reset_index(drop=True)
+    instrument_data['market_ids'] =  instrument_data.model_year
 
     # original BLP instruments
     if(False):
@@ -1871,6 +1871,7 @@ def generate_pyblp_instruments(mkt_data):
     # add rebate to instrument set
     #mkt_data['demand_instruments'+str(demand_instruments.shape[1]+1)] = mkt_data.rebate
     return mkt_data
+
 # test instrument strength!
 if(False):
     y = mkt_data['prices']
