@@ -31,18 +31,30 @@ elif(False):
 rlp_raw = pd.read_csv(rlpolk_data_path / "rlpolk_data_matched.csv", index_col = [0])
 evs_only = rlp_raw[rlp_raw["Fuel Type - Primary"] == "Electric"].reset_index(drop = True)
 
-# --- Match data to get further details -----------
-ev_chars = pd.DataFrame([])
+# --- Import Experian Data
+exp_data = pd.read_csv(data_path / "intermediate" / "US_VIN_data_common.csv")
+exp_ct = exp_data[exp_data["state"]=="CONNECTICUT"]
+exp_ct_ev = exp_ct[exp_ct["fueltype"]=="L"]
 
-for index, row in evs_only.iterrows():
-    vin = row["vin_corrected"]
-    try:
-        chars = fetch_vin_data(vin)
-    except:
-        pass
-    ev_chars = pd.concat([ev_chars, chars]).reset_index(drop = True)
-    if index == 20:
-        pass
+# Download some characteristics and show what we get - mostly NA
+if (False):
+    ev_chars = pd.DataFrame([])
 
-ev_chars.to_csv(rlpolk_data_path / "ev_characteristics.csv")
+    for index, row in evs_only.iterrows():
+        vin = row["vin_corrected"]
+        try:
+            chars = fetch_vin_data(vin)
+        except:
+            pass
+        ev_chars = pd.concat([ev_chars, chars]).reset_index(drop = True)
+        if index == 20:
+            pass
 
+    ev_chars.to_csv(rlpolk_data_path / "ev_characteristics.csv")
+
+# Check EV sales per model year
+rlp_evs_summary = evs_only[["year", "VEH_COUNT"]].groupby("year").sum().reset_index()
+exp_evs_summary = exp_ct_ev[["year", "agg_count"]].groupby("year").sum().reset_index()
+print(rlp_evs_summary.head(10))
+print(exp_evs_summary.head(10))
+print(rlp_evs_summary.iloc[0:6, 0].sum())
