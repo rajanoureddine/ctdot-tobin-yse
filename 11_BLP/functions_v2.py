@@ -1550,7 +1550,14 @@ def read_vin_data(str_project,str_data,version,dynamic):
     elif 'county' in version:
         str_vin_data = str_project + str_data + 'intermediate/CA_county_VIN_data.csv'
 
+    # Read in the data
     vin_data = pd.read_csv(str_vin_data)
+
+    # If version is a state name, then filter by that state
+    if version in state_names:
+        print(f"Filtering for only entries from {version}")
+        vin_data = vin_data.loc[vin_data["state"] == version, :]
+        print(f"There are {len(vin_data)} entries from {version}.")
     return vin_data
 
 def read_census_data(str_project,str_data,version):

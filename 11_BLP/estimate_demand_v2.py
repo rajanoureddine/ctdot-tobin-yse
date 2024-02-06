@@ -40,10 +40,12 @@ print("nodes: "+ str(n_nodes_par))
 #version = 'South Atlantic'
 #version = 'Middle Atlantic'
 #version = 'New England'
-version = 'state'
+# version = 'state'
+version = "CONNECTICUT"
 # version = 'hybrid' # ZEV states + a few others are each treated as separate market
 #version = 'hybrid/regional' # ZEV states + others grouped into census divisions
 # version = 'national'
+
 print('version: '+version)
 print(pyblp.__version__)
 
@@ -154,7 +156,7 @@ if model == 'logit':
     # run logit with corrected prices
     # logit_formulation = pyblp.Formulation('0 + prices + dollar_per_mile + electric + phev + electric:CA + phev:CA + hybrid + diesel + log_hp_weight + wheelbase + doors + range_elec + range_elec:CA + C(make) + C(drivetype) + C(bodytype)')
     # Updated to get rid of CA for national
-    logit_formulation = pyblp.Formulation('0 + prices + dollar_per_mile + electric + phev + hybrid + diesel + log_hp_weight + wheelbase + doors + range_elec + C(make) + C(drivetype) + C(bodytype)')
+    logit_formulation = pyblp.Formulation('0 + prices + dollar_per_mile + electric + phev + hybrid + diesel + log_hp_weight + wheelbase + doors + range_elec + chargers_per_tsm +  C(make) + C(drivetype) + C(bodytype)')
 
     problem = pyblp.Problem(logit_formulation, mkt_data)
     logit_results_price_updated = problem.solve()
@@ -192,6 +194,7 @@ if save:
             version_name = '_state_vehicle_'
     if model == 'logit':
         df_logit.to_csv(str_results_folder/f'demand_params_{str_time}.csv',index = False)
+        print(df_logit.to_latex(index = False))
     elif model == 'nested_logit':
         df_nl.to_csv(str_results_folder+'demand_params.csv',index=False)
     elif model == 'rc':
@@ -209,8 +212,8 @@ if save:
     # save the results object
     pickle.dump(results,open(str_results_folder / "pickled_demand.pickle",'wb'))
     pickle.dump(mkt_data,open(str_results_folder/ "pickled_mkt_data.pickle",'wb'))
-    if agent_data is not None:
-        pickle.dump(agent_data,open(str_results_folder+"/pickled_agent_data.pickle",'wb'))
+    # if agent_data is not None:
+    #     pickle.dump(agent_data,open(str_results_folder+"/pickled_agent_data.pickle",'wb'))
     if integration is not None:
         pickle.dump(integration,open(str_results_folder+"/pickled_integration_data.pickle",'wb'))
 
