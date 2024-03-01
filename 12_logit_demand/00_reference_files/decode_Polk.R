@@ -43,17 +43,17 @@ dt.sp <- merge(dt.sp,
 
 ####################################################################################################
 # read in VIN decoder
-# We lack the necessary file for Yale, so we will use the University of Pennsylvania file and merge in the required data 
-print("Reading in VIN decoder data...NOTE: We are using the University of Pennsylvania file for this example.")
-dt.decode <- data.table(read.csv(paste0(str.decoder,'DataOne_IDP_university_of_pennsylvania.csv')))
+# print("Reading in VIN decoder data...NOTE: We are using the University of Pennsylvania file for this example.")
+# We have acquired the required file
+dt.decode <- data.table(read.csv(paste0(str.decoder,'DataOne_IDP_yale_school_of_the_environment.csv')))
 len.decode <- nrow(dt.decode)
 setnames(dt.decode,colnames(dt.decode),tolower(colnames(dt.decode)))
 dt.decode[,make:=str_to_title(make)]
 dt.decode[,model:=str_replace_all(str_to_title(model),' ','-')]
 # The engine_id is missing in the Penn file, so we merge in from VIN_REFERENCE
-print("Note: Engine ID not available in Penn file. Merging in engine_id from VIN_REFERENCE...")
-dt.vin_reference = data.table(read.csv(paste0(str.decoder,'VIN_REFERENCE.csv')))
-dt.vin_reference = dt.vin_reference[,c('vin_pattern', 'vehicle_id', 'engine_id')]
+# print("Note: Engine ID not available in Penn file. Merging in engine_id from VIN_REFERENCE...")
+# dt.vin_reference = data.table(read.csv(paste0(str.decoder,'VIN_REFERENCE.csv')))
+# dt.vin_reference = dt.vin_reference[,c('vin_pattern', 'vehicle_id', 'engine_id')]
 dt.decode <- merge(dt.decode, dt.vin_reference, by = c('vin_pattern', 'vehicle_id'), all.x = T)
 
 # We don't have this variable in the Penn file
@@ -73,12 +73,13 @@ dt.decode <- merge(dt.decode,dt.trans,by=c('vehicle_id'),all.x=T)
 ####################################################################################################
 # read in engine data
 dt.engine <- data.table(read.csv(paste0(str.decoder,'DEF_ENGINE.csv')))
-print("Note: We use total_max_hp instead of max_hp, as the latter is not available in the files we have.")
-dt.decode <- merge(dt.decode,dt.engine[,.(engine_id,total_max_hp)],by=c('engine_id'),all.x=T)
+# print("Note: We use total_max_hp instead of max_hp, as the latter is not available in the files we have.")
+# We have the right file so we can use max_hp
+dt.decode <- merge(dt.decode,dt.engine[,.(engine_id,max_hp)],by=c('engine_id'),all.x=T)
 len.decode.new <- nrow(dt.decode)
 
 # Count the number of NAs in the total_max_hp column
-print(paste0("There are ", nrow(dt.decode[is.na(total_max_hp)]), " NAs in the total_max_hp column."))
+print(paste0("There are ", nrow(dt.decode[is.na(max_hp)]), " NAs in the total_max_hp column."))
 
 ####################################################################################################
 # read in mpg data from VIN decoder
@@ -174,9 +175,9 @@ setnames(dt.decode,'year','model_year')
 # Finally, merge S&P data with VIN decoder data
 
 # merge ----
-# Removed style, plant, length,height,width,wheelbase,curb_weight,max_hp
+# Removed style, plant, length,height,width,wheelbase,curb_weight,max_hp - and added them back in again. 
 dt.sp.merge <- merge(dt.sp.unique,
-                    dt.decode[,.(vin_pattern,vin_orig,vehicle_id,model_year,make,model,trim,
+                    dt.decode[,.(vin_pattern,vin_orig,vehicle_id,model_year,make,model,trim,style, plant, length,height,width,wheelbase,curb_weight,max_hp,
                                   fuel_type,msrp,vehicle_type,body_type,drive_type,doors,def_engine_size,city,highway,combined,
                                   fuel1,city_mpg1,highway_mpg1,combined_mpg1,
                                   fuel2,city_mpg2,highway_mpg2,combined_mpg2)],
@@ -189,7 +190,7 @@ dt.sp.merge <- dt.sp.merge[!is.na(vehicle_id)]
 print(paste0("Number of unmatched S&P records: ", nrow(dt.sp.merge.unmatched)))
 print(head(dt.sp.merge, 5))
 
-if(FALSE){    
+if(TRUE){    
   # save crosswalk of s&p data to potential vin pattern matches
   # save data ----
   if (v == '15state')
