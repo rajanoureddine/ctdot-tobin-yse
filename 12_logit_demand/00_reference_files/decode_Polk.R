@@ -54,12 +54,12 @@ dt.decode[,model:=str_replace_all(str_to_title(model),' ','-')]
 # print("Note: Engine ID not available in Penn file. Merging in engine_id from VIN_REFERENCE...")
 # dt.vin_reference = data.table(read.csv(paste0(str.decoder,'VIN_REFERENCE.csv')))
 # dt.vin_reference = dt.vin_reference[,c('vin_pattern', 'vehicle_id', 'engine_id')]
-dt.decode <- merge(dt.decode, dt.vin_reference, by = c('vin_pattern', 'vehicle_id'), all.x = T)
+# dt.decode <- merge(dt.decode, dt.vin_reference, by = c('vin_pattern', 'vehicle_id'), all.x = T)
 
 # We don't have this variable in the Penn file
-# if(FALSE){
-#   setnames(dt.decode,'def_engine_id','engine_id')
-# }
+if(TRUE){
+   setnames(dt.decode,'def_engine_id','engine_id')
+}
 
 ####################################################################################################
 dt.decode[,merge_id:=1:nrow(dt.decode)]
@@ -123,6 +123,7 @@ dt.dup.multi.fuel <- reshape(dt.dup.multi.fuel[,.(vehicle_id,engine_id,transmiss
                             idvar=c('vehicle_id','engine_id','transmission_id'),
                             timevar='fuel_type',direction='wide')
 
+
 dt.dup.multi.fuel[,`:=`(city_mpg1 = city.Gasoline,highway_mpg1 = highway.Gasoline,combined_mpg1 = combined.Gasoline,
                         fuel1 = 'Gasoline')]
 dt.dup.multi.fuel[,fuel2:=ifelse(!is.na(city.Ethanol),'Ethanol',
@@ -138,6 +139,7 @@ dt.dup.multi.fuel <- dt.dup.multi.fuel[,.(vehicle_id,engine_id,transmission_id,f
 dt.decode.mpg <- rbind(dt.decode.mpg[is.na(multi_fuel_flag),!c('city_old','highway_old','combined_old')],
                       dt.dup.multi.fuel,fill=TRUE)
 
+
 # check no remaining duplicates
 # dt.decode.mpg[,.(ct=.N),by=c('vehicle_id','engine_id','transmission_id')][ct > 1]
 
@@ -147,71 +149,79 @@ dt.decode.mpg <- rbind(dt.decode.mpg[is.na(multi_fuel_flag),!c('city_old','highw
 setnames(dt.decode.mpg,'transmission_id','trans_id')
 dt.decode <- merge(dt.decode,dt.decode.mpg,by=c('vehicle_id','engine_id','trans_id'),all.x=T)
 
-# some missing mpgs
-# dt.decode[is.na(combined) & is.na(combined_mpg1) & year > 2014,.(vehicle_id,engine_id,trans_id,make,model,year)]
-# drop some strange fuel_type mismatches
-unique(dt.decode[!is.na(fuel_type.y),.(fuel_type.x,fuel_type.y)])[order(fuel_type.x)]
-dt.decode <- dt.decode[((fuel_type.x == 'F' & fuel_type.y %in% c('Gasoline','Ethanol')) | 
-            (fuel_type.x == 'G' & fuel_type.y %in% c('Ethanol','E85')) | 
-            (fuel_type.x == 'I' & fuel_type.y %in% c('Gasoline','Electricity')) |
-            (fuel_type.x == 'N' & fuel_type.y == 'Gasoline')),
-            `:=`(city=NA,highway=NA,combined=NA,
-                city_mpg1=NA,highway_mpg1=NA,combined_mpg1=NA,fuel1=NA,
-                city_mpg2=NA,highway_mpg2=NA,combined_mpg2=NA,fuel2=NA)]
+if(TRUE){
 
-####################################################################################################
-# Complete clean of dt.decode
-# remove some unnecessary columns
-dt.decode <- dt.decode[,!c('merge_id','standard','fuel_type.y','veh_mpg_id',
-                            'fuel_grade','multi_fg_flag','multi_fuel_flag'),with=F]
-setnames(dt.decode,'fuel_type.x','fuel_type')
+  # some missing mpgs
+  # dt.decode[is.na(combined) & is.na(combined_mpg1) & year > 2014,.(vehicle_id,engine_id,trans_id,make,model,year)]
+  # drop some strange fuel_type mismatches
+  unique(dt.decode[!is.na(fuel_type.y),.(fuel_type.x,fuel_type.y)])[order(fuel_type.x)]
 
-# drop final digit for decoder
-dt.decode[,vin_orig:=vin_pattern]
-dt.decode[,vin_pattern:=substr(vin_pattern,1,9)]
-setnames(dt.decode,'year','model_year')
 
-####################################################################################################
-# Finally, merge S&P data with VIN decoder data
+  dt.decode <- dt.decode[((fuel_type.x == 'F' & fuel_type.y %in% c('Gasoline','Ethanol')) | 
+              (fuel_type.x == 'G' & fuel_type.y %in% c('Ethanol','E85')) | 
+              (fuel_type.x == 'I' & fuel_type.y %in% c('Gasoline','Electricity')) |
+              (fuel_type.x == 'N' & fuel_type.y == 'Gasoline')),
+              `:=`(city=NA,highway=NA,combined=NA,
+                  city_mpg1=NA,highway_mpg1=NA,combined_mpg1=NA,fuel1=NA,
+                  city_mpg2=NA,highway_mpg2=NA,combined_mpg2=NA,fuel2=NA)]
 
-# merge ----
-# Removed style, plant, length,height,width,wheelbase,curb_weight,max_hp - and added them back in again. 
-dt.sp.merge <- merge(dt.sp.unique,
-                    dt.decode[,.(vin_pattern,vin_orig,vehicle_id,model_year,make,model,trim,style, plant, length,height,width,wheelbase,curb_weight,max_hp,
-                                  fuel_type,msrp,vehicle_type,body_type,drive_type,doors,def_engine_size,city,highway,combined,
-                                  fuel1,city_mpg1,highway_mpg1,combined_mpg1,
-                                  fuel2,city_mpg2,highway_mpg2,combined_mpg2)],
-                    by=c('vin_pattern','model_year'),
-                    all.x=T,
-                    allow.cartesian=T)
-dt.sp.merge.unmatched <- dt.sp.merge[is.na(vehicle_id)]
-dt.sp.merge <- dt.sp.merge[!is.na(vehicle_id)]
-#unique(dt.sp.merge[make.x != make.y,.(make.x,make.y)])
-print(paste0("Number of unmatched S&P records: ", nrow(dt.sp.merge.unmatched)))
-print(head(dt.sp.merge, 5))
+  # Print the length of dt.decode
+  print(paste0("Length of dt.decode: ", nrow(dt.decode)))
+  print(paste0("Length of sp.unique: ", nrow(dt.sp.unique)))
 
-if(TRUE){    
-  # save crosswalk of s&p data to potential vin pattern matches
-  # save data ----
-  if (v == '15state')
-  {
-    file_sp <- 'top_15_county_sp.csv'
-    file_decoded <- 'sp_vin_decoded_nonunique.csv'
-  }else if(v == 'CT')
-  {
-    file_sp <- 'ct_zip_sp.csv'
-    file_decoded <- 'ct_sp_vin_decoded_nonunique.csv'
+  ####################################################################################################
+  # Complete clean of dt.decode
+  # remove some unnecessary columns
+  dt.decode <- dt.decode[,!c('merge_id','standard','fuel_type.y','veh_mpg_id',
+                              'fuel_grade','multi_fg_flag','multi_fuel_flag'),with=F]
+  setnames(dt.decode,'fuel_type.x','fuel_type')
+
+  # drop final digit for decoder
+  dt.decode[,vin_orig:=vin_pattern]
+  dt.decode[,vin_pattern:=substr(vin_pattern,1,9)]
+  setnames(dt.decode,'year','model_year')
+
+  ####################################################################################################
+  # Finally, merge S&P data with VIN decoder data
+  # merge ----
+  # Removed style, plant, length,height,width,wheelbase,curb_weight,max_hp - and added them back in again. 
+  dt.sp.merge <- merge(dt.sp.unique,
+                      dt.decode[,.(vin_pattern,vin_orig,vehicle_id,model_year,make,model,trim,style, plant, length,height,width,wheelbase,curb_weight,max_hp,
+                                    fuel_type,msrp,vehicle_type,body_type,drive_type,doors,def_engine_size,city,highway,combined,
+                                    fuel1,city_mpg1,highway_mpg1,combined_mpg1,
+                                    fuel2,city_mpg2,highway_mpg2,combined_mpg2)],
+                      by=c('vin_pattern','model_year'),
+                      all.x=T,
+                      allow.cartesian=T)
+  print(paste0("Length of dt.sp.merge: ", nrow(dt.sp.merge)))
+  dt.sp.merge.unmatched <- dt.sp.merge[is.na(vehicle_id)]
+  dt.sp.merge <- dt.sp.merge[!is.na(vehicle_id)]
+  #unique(dt.sp.merge[make.x != make.y,.(make.x,make.y)])
+  print(paste0("Number of unmatched S&P records: ", nrow(dt.sp.merge.unmatched)))
+
+  if(TRUE){    
+    # save crosswalk of s&p data to potential vin pattern matches
+    # save data ----
+    if (v == '15state')
+    {
+      file_sp <- 'top_15_county_sp.csv'
+      file_decoded <- 'sp_vin_decoded_nonunique.csv'
+    }else if(v == 'CT')
+    {
+      file_sp <- 'ct_zip_sp.csv'
+      file_decoded <- 'ct_sp_vin_decoded_nonunique.csv'
+    }
+    # save the original s&p data with sp_id
+    write.csv(dt.sp,paste0(str.sp,file_sp),row.names=F)
+
+    # save the mapping of s&p vin to more vin info
+    setnames(dt.sp.merge,c('make.x','model.x','make.y','model.y'),
+            c('make_sp','model_sp','make','model'))
+    write.csv(dt.sp.merge,paste0(str.sp,file_decoded),row.names=F)
+
+    length(unique(dt.sp$sp_id))
+    nrow(dt.sp.merge.unmatched)
+    nrow(dt.sp.merge[,.(ct=.N),by=c('vin_pattern')][ct>1])
+    nrow(dt.sp.merge[,.(ct=.N),by=c('vin_pattern')][ct==1])
   }
-  # save the original s&p data with sp_id
-  write.csv(dt.sp,paste0(str.sp,file_sp),row.names=F)
-
-  # save the mapping of s&p vin to more vin info
-  setnames(dt.sp.merge,c('make.x','model.x','make.y','model.y'),
-          c('make_sp','model_sp','make','model'))
-  write.csv(dt.sp.merge,paste0(str.sp,file_decoded),row.names=F)
-
-  length(unique(dt.sp$sp_id))
-  nrow(dt.sp.merge.unmatched)
-  nrow(dt.sp.merge[,.(ct=.N),by=c('vin_pattern')][ct>1])
-  nrow(dt.sp.merge[,.(ct=.N),by=c('vin_pattern')][ct==1])
 }
