@@ -85,23 +85,6 @@ class Graph:
                 else:
                     return [self.getPath(self.prev[node][i], src, path + [self.prev[node][i]]) for i in range(len(self.prev[node]))]
 
-
-                    # paths = []
-                    # for i in range(len(self.prev[node])):
-                    #     newpath = path + [self.prev[node][i]]
-                    #     paths.append([newpath])
-                    # return [self.getPath(self.prev[node][i], paths[i], src) for p in range(len(paths))]
-                    #     #path.append(self.prev[node][i])
-                    #     #paths.append(self.getPath(self.prev[node][i], src, path))
-
-
-                #     return [self.getPath(self.prev[node][i]) for i in range(len(self.prev[node]))]
-                # else: # we branch
-                #     path1 = path.copy()
-                #     path2 = path.copy()
-                #     path1.append(self.prev[node][0])
-                #     path2.append(self.prev[node][1])
-                #     return [self.getPath(self.prev[node][0], src, path1), self.getPath(self.prev[node][1], src, path2)]
             except Exception as e:
                 return "No path"
 
@@ -110,9 +93,6 @@ class Graph:
         print("Vertex Distance from Source, and Path")
         for i in range(self.V):
             path = self.getPath(i, src)
-            #path_lsts = [p for p in path if type(p) == list]
-            #path_nlsts = [p for p in path if type(p) != list]
-            #path = path_nlsts + path_lsts
             print("{0}\t{1}\t\t{2}".format(i, self.dist[i], path))
     
     # utility function used to print the path
@@ -120,50 +100,42 @@ class Graph:
         for i in range(self.V):
             print(f"Path to {i}: {self.getPath(i, src)}")
  
-    # The main function that finds shortest distances from src to
-    # all other vertices using Bellman-Ford algorithm. The function
-    # also detects negative weight cycle
-    def BellmanFord(self, src):
+    # The main function that finds shortest distances 
+    def BellmanFord(self, src, print = False):
         if not self.weights == 1:
             raise ValueError("Standard Bellman-Ford Algorithm only works with one weight")
  
         # Step 1: Initialize distances from src to all other vertices
-        # as INFINITE
         self.dist = [float("Inf")] * self.V
         self.dist[src] = 0
  
         # Step 2: Relax all edges |V| - 1 times. A simple shortest
-        # path from src to any other vertex can have at-most |V| - 1
-        # edges
         for _ in range(self.V - 1):
-            # Update dist value and parent index of the adjacent vertices of
-            # the picked vertex. Consider only those vertices which are still in
-            # queue
+
             for u, v, w in self.graph:
                 if self.dist[u] != float("Inf") and self.dist[u] + w < self.dist[v]:
                     self.dist[v] = self.dist[u] + w
                     self.prev[v] = u
+                
+                # Allows for possibility of equally distant paths
                 elif self.dist[u] != float("Inf") and self.dist[u] + w == self.dist[v]:
-                    if type(self.prev[v]) != list and self.prev[v] != u:
-                        self.prev[v] = [self.prev[v], u]
+                    if self.prev[v] is None:
+                        self.prev[v] = u
+                    elif type(self.prev[v]) != list and self.prev[v] != u:
+                        self.prev[v] = sorted([self.prev[v], u])
                     elif type(self.prev[v]) == list and u not in self.prev[v]:
-                        self.prev[v].append(u)
-
-                    # self.prev[v] = [u, self.prev[v]]
+                        self.prev[v] = sorted(self.prev[v] + [u])
+                        
  
-        # Step 3: check for negative-weight cycles. The above step
-        # guarantees shortest distances if graph doesn't contain
-        # negative weight cycle. If we get a shorter path, then there
-        # is a cycle.
- 
+        # Step 3: check for negative-weight cycles.
         for u, v, w in self.graph:
             if self.dist[u] != float("Inf") and self.dist[u] + w < self.dist[v]:
                 print("Graph contains negative weight cycle")
                 return
+        
+        if print:
+            self.printArr(src)
  
-        # print all distance
-        # self.printArr(src)
-    
     def Dijkstra(self, src):
         self.dist = [float("Inf")] * self.V
         self.dist[src] = 0
@@ -189,12 +161,12 @@ class Graph:
                         self.dist[v] = dsuv
                         self.prev[v] = u
                     elif dsuv == self.dist[v]:
-                        if type(self.prev[v]) != list:
-                            self.prev[v] = [self.prev[v], u]
+                        if self.prev[v] is None:
+                            self.prev[v] = u
+                        elif type(self.prev[v]) != list:
+                            self.prev[v] = sorted([self.prev[v], u])
                         else:
-                            self.prev[v].append(u)
-                            self.prev[v] = [u, self.prev[v]]
-                        
+                            self.prev[v] = sorted(self.prev[v]+ [u])
 
         # self.printArr(src)
     
@@ -221,85 +193,100 @@ class GraphExtended():
     def addEdge(self, u, v, w):
         self.graph.append([u, v, w])
     
-    def BellmanExtended(self, src, dest):
+    def BellmanExtended(self, src, dest, print_dest = False):
         self.path[src] = [Path(src)]
-        result = False
 
         for _ in range(self.V - 1):
-            # change = False
+
             for u, v, w in self.graph:
                 for p in self.path[u]:
                     # Create paths
                     uv = Path(u)
                     uv.addLink(u, v, w)
+
                     # New to add
                     new_path = p + uv
 
                     # Check it's within the constraints
                     if np.all(np.less_equal(new_path.weight_sum, self.constraints)):
-                        #if v == dest:
-                        #    if self.path[v]:
-                        #        self.path[v].append(new_path)
-                        #    else:
-                        #        self.path[v] = [new_path]
-                        #    print(self.path[v][0].path)
-                        #    return "Done"
+
+                        # If it's within the constraints, check 
                         flag = True
+                        add_path_flag = True
+
                         if self.path[v]:
                             for q in self.path[v]:
-                                if np.all(np.less_equal(q.weight_sum, new_path.weight_sum)):
+                                if np.all(np.less(q.weight_sum, new_path.weight_sum)):
                                     flag = False
-                                    break
+                                    break # don't need to consider any more 
                                 if np.all(np.less_equal(new_path.weight_sum, q.weight_sum)):
-                                    self.path[v].remove(q)
-                        
+                                    add_path_flag = True
+                                    if not np.all(np.equal(new_path.weight_sum, q.weight_sum)):
+                                        self.path[v].remove(q)
+                                    elif new_path.path == q.path:
+                                        add_path_flag = False
+                                        break
+                                        
                         if flag == True:
-                            if self.path[v]:
+                            if self.path[v] and add_path_flag:
                                 self.path[v].append(new_path)
                             else:
                                 self.path[v] = [new_path]
-                            change = True
 
-        self.printPaths(dest)
+        if not print_dest:
+            self.printPaths()
+        else:
+            print(self.path[dest][0].path)
 
-    def printPaths(self, dest):
-        for i in range(len(self.path[dest])):
-            print(self.path[dest][i].path)
+    def printPaths(self, dest = False):
+        print("Vertex Distance from Source, and Path")
+        for i in range(self.V):
+            if len(self.path[i]) >1:
+                paths = [p.path for p in self.path[i]]
+            else:
+                paths = self.path[i][0].path
+            print("{0}\t{1}\t\t{2}".format(i, self.path[i][0].weight_sum, paths))
 
 
 # if __name__ == '__main__':
-#     g = GraphExtended(14, 2, np.array([np.infty, 40]))
-#     for i in range(1, 6):
-#         g.addEdge(i-1, i, [6, 10])
-#     
-#     g.addEdge(0, 6, [9,15])
-#     g.addEdge(6, 7, [6,10])
-#     g.addEdge(7,8, [19, -30])
-#     g.addEdge(8,9, [6,10])
-#     g.addEdge(9,5, [9,15])
-#     g.addEdge(0,10, [9,15])
-#     g.addEdge(10,11, [6,10])
-#     g.addEdge(11,12, [19,-31])
-#     g.addEdge(12,13, [6,10])
-#     g.addEdge(13, 5, [9,15])
+#    g = GraphExtended(14, 2, np.array([np.infty, 40]))
+#    for i in range(1, 6):
+#        g.addEdge(i-1, i, [6, 10])
+#    
+#    g.addEdge(0, 6, [9,15])
+#    g.addEdge(6, 7, [6,10])
+#    g.addEdge(7,8, [19, -30])
+#    g.addEdge(8,9, [6,10])
+#    g.addEdge(9,5, [9,15])
+#    g.addEdge(0,10, [9,15])
+#    g.addEdge(10,11, [6,10])
+#    g.addEdge(11,12, [19,-31])
+#    g.addEdge(12,13, [6,10])
+#    g.addEdge(13, 5, [9,15])
 # 
-#     g.BellmanExtended(0, 5)
+#    g.BellmanExtended(0, 5)
+
+   #for i in g.path:
+   #     print(i[0].path)
 
 if __name__ == '__main__':
-    graph_size = 10
+    graph_size = 20
     graph = np.zeros([graph_size, graph_size])
     for i in range(graph_size):
         for j in range(graph_size):
-            graph[i][j] = np.random.choice([0, 1], p=[0.7, 0.3])
-    graph_weights = np.random.randint(1, 5, (graph_size, graph_size))
+            graph[i][j] = np.random.choice([0, 1], p=[0.6, 0.4])
+    graph_weights = np.random.randint(1, 8, (graph_size, graph_size))
     g = Graph(graph_size)
+    g_e = GraphExtended(graph_size, 1, np.array([np.infty]))
     for i in range(graph_size):
         for j in range(graph_size):
             if graph[i][j] != 0:
                 g.addEdge(i, j, graph_weights[i][j])
-    g.Dijkstra(0)
-    print(g.prev)
-    g.reset()
-    g.BellmanFord(0)
-    print(g.prev)
-    print(graph)
+                g_e.addEdge(i, j, graph_weights[i][j])
+    #g.Dijkstra(0)
+    #print(g.prev)
+    #g.reset()
+    g.BellmanFord(0, True)
+    g_e.BellmanExtended(0, 5)
+    # print(g_e.path[5][0].path)
+   #  print(graph)

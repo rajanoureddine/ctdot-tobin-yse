@@ -22,21 +22,23 @@ pd.set_option('display.max_rows', 500)
 str_cwd = pathlib.Path().resolve().parent
 str_dir = str_cwd / "Documents" / "tobin_working_data"
 str_rlp_data = str_dir / "rlpolk_data"
-rlp_data_file = "ct_decoded_full_attributes.csv"
+rlp_data_file =  "ct_decoded_full_attributes.csv"
+# rlp_data_alternative = "rlp_with_dollar_per_mile.csv"
 
 # Import the final RLP data
 print(f"Importing the final RLP data, located at {str_rlp_data / rlp_data_file}")
 df_rlp = pd.read_csv(str_rlp_data / rlp_data_file)
 
 # Print columns
-print(df_rlp.columns)
+# print(df_rlp.columns)
 
 
 ####################################################################################################
 # Clean the data
-df_rlp.loc[:, "report_year"] = df_rlp.loc[:, "report_year_month"].astype(str).str[:4].astype(int)
-df_rlp.loc[:, "report_month"] = df_rlp.loc[:, "report_year_month"].astype(str).str[4:].astype(int)
-df_rlp = df_rlp.drop(columns=["report_year_month"])
+if rlp_data_file:
+    df_rlp.loc[:, "report_year"] = df_rlp.loc[:, "report_year_month"].astype(str).str[:4].astype(int)
+    df_rlp.loc[:, "report_month"] = df_rlp.loc[:, "report_year_month"].astype(str).str[4:].astype(int)
+    df_rlp = df_rlp.drop(columns=["report_year_month"])
 
 # Add a combined vin and model year column
 df_rlp["vin_my"] = df_rlp.vin_pattern + "_" + df_rlp.model_year.astype(str)
@@ -67,6 +69,7 @@ if True: # Check for zeroes, by extracting unique values and comparing to realit
     unique_combinations_y = unique_years * unique_mys
     unique_combinations_z = unique_zips * unique_mys
     unique_combinations_yc = unique_years * unique_counties * unique_mys
+    unique_combinations_c = unique_counties * unique_mys
 
     # Print out the theoretical number of unique combinations
     if False:
@@ -83,6 +86,7 @@ if True: # Get actual number of unique combinations
     unique_y = df_rlp[["report_year", "vin_my"]].drop_duplicates()
     unique_z = df_rlp[["zip_code", "vin_my"]].drop_duplicates()
     unique_yc = df_rlp[["report_year", "county_name", "vin_my"]].drop_duplicates()
+    unique_c = df_rlp[["county_name", "vin_my"]].drop_duplicates()
 
     if False: # Print the results
         print(f"Number of combinations in the RLP data with years, months, model years, and zip codes: {len(unique_ymz)}")
@@ -164,17 +168,16 @@ if False: # Determine for each VIN, the number of zips it is available for
     print(vins_zips.tail(15).to_latex(float_format="%.2f"))
 
 if True: # Determine for each VIN, the number of counties it is available for
+    # Get the number of counties each VIN appears in
     vins_counties = df_rlp[["vin_pattern", "county_name"]].drop_duplicates()
     vins_counties = vins_counties.groupby("vin_pattern").size().reset_index(name = 'count').sort_values(by = "count", ascending = False)
     vins_counties["percentage"] = round(vins_counties["count"] / unique_counties, 2)
 
-    # Check the the legnth is correct
-    # assert(vins_counties["count"].sum() == len(unique_z))
-
-    # Join back in the make, model, model_year
+    # Join back in the make, model, model_year for each VIN
     len_vins_counties = len(vins_counties)
     vins_counties = vins_counties.merge(df_rlp[["vin_pattern", "make", "model", "model_year", "trim", "msrp"]].drop_duplicates(), how = "left", on = "vin_pattern")
     assert(len(vins_counties) == len_vins_counties)
+    assert(len(vins_counties) == df_rlp["vin_pattern"].nunique())
 
     # Join back in the total number of sales
     sales_per_vin = df_rlp.groupby("vin_pattern").agg({"veh_count": "sum"}).reset_index()
@@ -182,16 +185,25 @@ if True: # Determine for each VIN, the number of counties it is available for
     assert(len(vins_counties) == len_vins_counties)
     assert(vins_counties["veh_count"].sum() == df_rlp["veh_count"].sum())
 
-    # Print the results
-    print(vins_counties.head(10).to_latex(float_format="%.2f"))
-    #print(vins_counties.tail(15))
+    # Print the results - showing the number of counties each VIN is available in
+    # print(vins_counties.head(10))
 
-    # Now aggregate by count, and tell me the percentage of the total veh_count in each group
-    vins_counties_summary = vins_counties.groupby("count").agg({"veh_count": "sum"}).reset_index()
-    vins_counties_summary["percentage"] = round(vins_counties_summary["veh_count"] / df_rlp["veh_count"].sum(), 2)
-    assert(vins_counties_summary["veh_count"].sum() == df_rlp["veh_count"].sum())
+    # Now show the count of unique VINs by count of counties
+    vins_per_count = vins_counties.groupby("count").size().reset_index(name = "count_vins")
+    vins_per_count["percentage of VINs"] = round(vins_per_count["count_vins"] / len(vins_counties), 2)
+    # print(vins_per_count.head(10).sort_values("count", ascending=False))
 
-    print(vins_counties_summary.head(10).sort_values("veh_count", ascending=False).to_latex(float_format="%.2f"))
+    # Now aggregate by count of ZIPs, and tell me the percentage of the total veh_count in each group
+    sales_per_count = vins_counties.groupby("count").agg({"veh_count": "sum"}).reset_index()
+    sales_per_count["percentage of sales"] = round(sales_per_count["veh_count"] / df_rlp["veh_count"].sum(), 2)
+    assert(sales_per_count["veh_count"].sum() == df_rlp["veh_count"].sum())
+
+    # Now join on count
+    summary_table = vins_per_count.merge(sales_per_count, how = "left", on = "count")
+    summary_table["sales_per_vin"] = round(summary_table["veh_count"] / summary_table["count_vins"], 2)
+    print(summary_table.head(10).sort_values("count", ascending=False).to_latex(float_format="%.2f"))
+
+    # print(sales_per_count.head(10).sort_values("veh_count", ascending=False))
     #print(vins_counties.head(15).to_latex(float_format="%.2f"))
     #print(vins_counties.tail(15).to_latex(float_format="%.2f"))
 

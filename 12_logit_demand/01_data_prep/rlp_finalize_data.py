@@ -20,6 +20,7 @@ import platform
 
 # Warnings and display
 pd.set_option('display.max_rows', 500)
+pd.set_option('display.max_columns', 500)
 
 ####################################################################################################
 # Setup paths
@@ -133,6 +134,18 @@ warnings.warn(f"Dropped {dropped_dollar_per_mile} vehicles that are not gasoline
 warnings.warn("Cannot match the horsepower data at this stage. This should be moved to merge_RLP_policy_data.py", category=UserWarning)
 
 ####################################################################################################
+# Drop VINs available in less than 
+
+
+####################################################################################################
 # Save the final data
 str_rlp_final = str_rlp_data / "rlp_with_dollar_per_mile.csv"
 df_rlp.to_csv(str_rlp_final, index = False)
+
+####################################################################################################
+# Save data per market (i.e. county)
+str_rlp_final_market = str_rlp_data / "rlp_with_dollar_per_mile_market.csv"
+
+# Group by product and market
+df_rlp_market = df_rlp.groupby(["vin_pattern", "county_name"]).sum().reset_index()
+df_rlp_market = df_rlp_market.drop(columns = ["report_year", "report_month"])

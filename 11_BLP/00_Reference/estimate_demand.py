@@ -1,6 +1,5 @@
-# auto_strategies_env (conda; not pyblp 0.13)
-# ase_blp_1_0 (conda; pyblp 1.0)
-# or ev_env (up-to-date pyblp; lives in SW_Automaker_Strategies folder)
+############################################################################################################
+# Import necessary packages
 import numpy as np
 import pandas as pd
 #import censusdata

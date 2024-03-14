@@ -1,7 +1,8 @@
-# Packages to import
+############################################################################################################
+# Import necessary packages
 import numpy as np
 import pandas as pd
-#import censusdata
+# import censusdata
 import pyblp
 import statsmodels.api as sm
 import time
@@ -18,33 +19,10 @@ from functions_v2 import * # this is the set of additional functions
 
 pyblp.options.verbose = True
 
-# determine whether this is running on the cluster
-bln_cluster = False
 
-# implement parallelization
-parallel = False
-n_nodes_par = 2
-save = True
-print("nodes: "+ str(n_nodes_par))
-
-# state vs. national level data vs. hybrid
-#version = sys.argv[1]
-#version = 'CA_county'
-#version = 'CALIFORNIA'
-#version = 'West'
-#version = 'Mountain'
-#version = 'West North Central'
-#version = 'East North Central'
-#version = 'West South Central'
-#version = 'East South Central'
-#version = 'South Atlantic'
-#version = 'Middle Atlantic'
-#version = 'New England'
-# version = 'state'
+############################################################################################################
+# Settings 
 version = "CONNECTICUT"
-# version = 'hybrid' # ZEV states + a few others are each treated as separate market
-#version = 'hybrid/regional' # ZEV states + others grouped into census divisions
-# version = 'national'
 
 print('version: '+version)
 print(pyblp.__version__)
@@ -95,18 +73,17 @@ split = 'None'
 #split = 'geog'
 print_split(split)
 
-#####################
-# set up directories#
-#####################
+############################################################################################################
+# set up directories
 if platform.platform()[0:5] == 'macOS':
     cd = pathlib.Path().resolve().parent
     str_project = cd / "Documents" 
     str_data = "tobin_working_data"
+    str_rlp = str_data / "rlpolk_data"
+    str_sales_vin_characteristic = str_rlp / "rlp_with_dollar_per_mile.csv"
     output_folder = str_project / str_data / "outputs"
 
-##########################
-# read in and clean data #
-##########################
+############################################################################################################
 # read in VIN data - file of approx 100000 rows, including car characteristics
 vin_data = read_vin_data(str_project,str_data,version,dynamic)
 

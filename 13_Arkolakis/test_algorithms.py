@@ -1,6 +1,9 @@
 import numpy as np
+import pandas as pd
 import pytest
 from bellman_ford import Graph, Path, GraphExtended
+pd.set_option('display.max_columns', None)
+pd.set_option('display.max_rows', None)
 
 
 @pytest.fixture
@@ -10,13 +13,17 @@ def setup_graph():
     for i in range(graph_size):
         for j in range(graph_size):
             graph[i][j] = np.random.choice([0, 1], p=[0.7, 0.3])
-    graph_weights = np.random.randint(1, 5, (graph_size, graph_size))
+    graph_weights = np.random.randint(1, 20, (graph_size, graph_size))
     g = Graph(graph_size)
+    g_e = GraphExtended(graph_size, 1, np.array([np.infty]))
     for i in range(graph_size):
         for j in range(graph_size):
             if graph[i][j] != 0:
                 g.addEdge(i, j, graph_weights[i][j])
-    yield(g, graph, graph_weights)
+                g_e.addEdge(i, j, graph_weights[i][j])
+    assert(np.array_equal(g.graph, g_e.graph))
+    print(pd.DataFrame(graph_weights))
+    yield(g, g_e, graph, graph_weights)
 
 
 @pytest.fixture
@@ -68,15 +75,15 @@ def test_BF_too_many_weights():
         g.BellmanFord(0)
 
 def test_bellman_ford(setup_graph):
-    g, _, _ = setup_graph
+    g, _, _, _ = setup_graph
     g.BellmanFord(0)
 
 def test_dijkstra(setup_graph):
-    g, _, _ = setup_graph
+    g,_, _, _ = setup_graph
     g.Dijkstra(0)
 
 def test_bellman_ford_dijkstra(setup_graph, capfd):
-    g, graph, graph_weights = setup_graph
+    g, _, graph, graph_weights = setup_graph
     g.BellmanFord(0)
     out1, err1 = capfd.readouterr()
     g.reset()
@@ -124,28 +131,26 @@ def test_Path_add():
 
 def test_BF_extended(setup_bf_extended, capfd):
     g = setup_bf_extended
-    g.BellmanExtended(0, 5)
+    g.BellmanExtended(0, 5, True)
     out, err = capfd.readouterr()
     assert(out == "[0, 10, 11, 12, 13, 5]\n")
 
+def test_BF_extended_path_distances(setup_graph):
+    """Checks that all the shortest paths are indeed of the same distance / length for each node"""
+    g, g_e, _, _ = setup_graph
+    g_e.BellmanExtended(0, 5)
+    for i in range(len(g_e.path)):
+        flag = True
+        dist = g_e.path[i][0].weight_sum
+        for j in range(1, len(g_e.path[i])):
+            flag = (g_e.path[i][j].weight_sum == dist)
+        assert(flag)
 
-
-
-# def test_bellman_ford(capfd):
-#     g = Graph(graph_size)
-#     for i in range(graph_size):
-#         for j in range(graph_size):
-#             if graph[i][j] != 0:
-#                 g.addEdge(i, j, graph_weights[i][j])
-#     g.BellmanFord(0)
-#     out1, err1 = capfd.readouterr()
-#     g.reset()
-#     g.Dijkstra(0)
-#     out2, err2 = capfd.readouterr()
-#     assert(out1 == out2)
-#     # print(graph)
-#     # print(graph_weights)
-
-#def test_bellman_ford(benchmark):
-#    result = benchmark(bellman_ford)
-#    assert result
+def test_BF_BF_extended(setup_graph, capfd):
+    g, g_e, _, graph_weights = setup_graph
+    g.BellmanFord(0, True)
+    out1, err1 = capfd.readouterr()
+    g_e.BellmanExtended(0, 5)
+    out2, err2 = capfd.readouterr()
+    assert(out1 == out2)
+    assert(np.array_equal(g.graph, g_e.graph))
