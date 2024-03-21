@@ -1,4 +1,12 @@
 ####################################################################################################
+# Finalize the RLP data.
+# Our input is ct_decoded_full_attributes.csv which is produced by merge_SP_policy_data.R
+# (Note: Haven't finished converting the R code to Python yet)
+# We merge the RLP data with the energy data and calculate the dollar per mile for each vehicle
+# We then save the final data to rlp_with_dollar_per_mile.csv
+# We also calculate log horsepower to weight
+
+####################################################################################################
 # Sources
 # https://afdc.energy.gov/vehicles/electric_emissions_sources.html
 phev_elec_share = 0.563
@@ -34,9 +42,6 @@ print(f"Importing the RLP data to be finalized, located at {str_rlp_data / rlp_d
 df_rlp = pd.read_csv(str_rlp_data / rlp_data_file)
 len_rlp = len(df_rlp)
 
-# Print columns
-print(df_rlp.columns)
-
 ####################################################################################################
 # Import the energy price data
 str_energy = str_dir / "energy_calcs"
@@ -48,24 +53,6 @@ str_electricity_processed = str_energy / "yearly_electricity_prices_processed.cs
 df_gas = pd.read_csv(str_gas_processed)
 df_diesel = pd.read_csv(str_diesel_processed)
 df_electricity = pd.read_csv(str_electricity_processed)
-
-####################################################################################################
-# Import the vin decoder data
-if False: # We do not import the horsepower data for now. 
-    warnings.warn("Horsepower Data: We re-import the VIN Decoder in this file. This should be moved to merge_RLP_policy_data.py")
-    str_vindecoder = str_dir / "vin_decoder"
-    df_vindecoder = pd.read_csv(str_vindecoder / "DataOne_IDP_yale_school_of_the_environment.csv")
-    df_engines = pd.read_csv(str_vindecoder / "DEF_ENGINE.csv")
-
-    df_engines["matched"] = 1
-    df_vindecoder.columns = df_vindecoder.columns.str.lower()
-    df_engines.columns = df_engines.columns.str.lower()
-
-    df_vindecoder = df_vindecoder.merge(df_engines, left_on = "def_engine_id", right_on = "engine_id", how = "left")
-    assert(df_vindecoder["matched"].sum() == len(df_vindecoder)), "Vindecoder was not a 1:1 match"
-
-    df_vindecoder = df_vindecoder[["vin_pattern", "engine_id", "max_hp", "max_hp_at", "matched"]]
-    df_vindecoder.loc[:, "vin_pattern"] = df_vindecoder.loc[:, "vin_pattern"].str[0:9]
 
 ####################################################################################################
 # Clean the RLP data
@@ -83,6 +70,10 @@ df_diesel.columns = df_diesel.columns.str.lower()
 df_electricity.columns = df_electricity.columns.str.lower()
 
 ####################################################################################################
+# Calculate log horsepower to weight
+df_rlp["log_hp_wt"] = np.log(df_rlp["max_hp"] / df_rlp["curb_weight"])
+
+####################################################################################################
 # Merge the RLP data with the energy data
 df_rlp = df_rlp.merge(df_gas[["year", "month", "gas_price_21"]], left_on = ["report_year", "report_month"],
                       right_on = ["year", "month"], how = "left")
@@ -95,7 +86,6 @@ df_rlp = df_rlp.merge(df_electricity[["year", "electricity_price_21"]], left_on 
 
 assert(len(df_rlp) == len_rlp), "Length mismatch"
 
-
 # Confirm the match worked and drop the extra columns
 assert(df_rlp["year_x"].equals(df_rlp["year_y"])), "Year mismatch"
 assert(df_rlp["month_x"].equals(df_rlp["month_y"])), "Month mismatch"
@@ -105,10 +95,14 @@ assert(df_rlp["month_x"].equals(df_rlp["report_month"])), "Month mismatch"
 df_rlp = df_rlp.drop(columns = ["year_x", "month_x", "year_y", "month_y", "year"])
 
 ####################################################################################################
+# Convert variable values to lower case
+df_rlp["fuel"] = df_rlp["fuel"].str.lower()
+df_rlp["fuel1"] = df_rlp["fuel1"].str.lower()
+df_rlp["fuel2"] = df_rlp["fuel2"].str.lower()
+
 # Calculate the dollar per mile for gasoline and hybrid
 mask = ((df_rlp["fuel"] == "gasoline")|(df_rlp["fuel"] == "hybrid"))
 df_rlp.loc[mask, "dollar_per_mile"] = df_rlp.loc[mask, "gas_price_21"] / df_rlp.loc[mask, "combined"]
-print(df_rlp.loc[mask, ["gas_price_21", "combined", "dollar_per_mile"]].head())
 
 # Calculate the dollar per mile for diesel
 mask = (df_rlp["fuel"] == "diesel")
@@ -119,23 +113,34 @@ mask = (df_rlp["fuel"] == "flex fuel")
 df_rlp.loc[mask, "dollar_per_mile"] = df_rlp.loc[mask, "gas_price_21"] / df_rlp.loc[mask, "combined"]
 
 # Calculate the dollar per mile for electric EPA fueleconomy.gov says 33.7 kWh per gallon
-warnings.warn("PHEV Dollar Per Mile Calc: We do not have mpg_elec and mpg_gas, so we used combined mpg", category=UserWarning)
+mask = (df_rlp["fuel"] == "electric")
+df_rlp.loc[mask, "dollar_per_mile"] = (df_rlp.loc[mask, "electricity_price_21"] / 100) * (33.7 / df_rlp.loc[mask, "combined"])
+
+# Calculate the dollar per mile for PHEV 
 mask = (df_rlp["fuel"] == "phev")
-df_rlp.loc[mask, "dollar_per_mile"] = ((df_rlp.loc[mask, "electricity_price_21"] * phev_elec_share) 
-                                       + (df_rlp.loc[mask, "gas_price_21"] * (1 - phev_elec_share)))/ df_rlp.loc[mask, "combined"]
+
+# There are some erroneous fuels to address 
+# Mark the entries to drop and count how many 
+df_rlp.loc[:, "phev_erroneous_fuels"] = 0
+df_rlp.loc[mask & (df_rlp["fuel1"].isna()) & (df_rlp["fuel2"].isna()), "phev_erroneous_fuels"] = 1
+phev_erroneous = df_rlp.loc[mask, "phev_erroneous_fuels"].sum()
+print(f"Dropping {phev_erroneous} PHEV vehicles with missing fuel types")
+
+# Drop them and confirm the right number were dropped
+len_df = len(df_rlp)
+df_rlp = df_rlp.loc[(df_rlp["phev_erroneous_fuels"] == 0)]
+assert(len(df_rlp) == len_df - phev_erroneous)
+assert(df_rlp.loc[mask, "fuel1"].unique().tolist() == ["gasoline"]), "PHEV fuel 1 is not gasoline" # Confirm the variable ordering
+assert(df_rlp.loc[mask, "fuel2"].unique().tolist() == ["electricity"]), "PHEV fuel 2 is not electric"
+df_rlp.loc[mask, "dollar_per_mile_gas"] = df_rlp.loc[mask, "gas_price_21"] / df_rlp.loc[mask, "combined_mpg1"]
+df_rlp.loc[mask, "dollar_per_mile_elec"] = (df_rlp.loc[mask, "electricity_price_21"] / 100) * (33.7 / df_rlp.loc[mask, "combined_mpg2"])
+df_rlp.loc[mask, "dollar_per_mile"] = (df_rlp.loc[mask, "dollar_per_mile_gas"] * (1 - phev_elec_share)) + (df_rlp.loc[mask, "dollar_per_mile_elec"] * phev_elec_share)
+df_rlp = df_rlp.drop(columns = ["dollar_per_mile_gas", "dollar_per_mile_elec"])
 
 # Drop any vehicles not in the categories above
 dropped_dollar_per_mile = df_rlp["dollar_per_mile"].isna().sum()
 df_rlp = df_rlp.dropna(subset = ["dollar_per_mile"])
-warnings.warn(f"Dropped {dropped_dollar_per_mile} vehicles that are not gasoline, hybrid diesel, flex fuel, or phev", category=UserWarning)
-
-####################################################################################################
-# Add the horsepower data
-warnings.warn("Cannot match the horsepower data at this stage. This should be moved to merge_RLP_policy_data.py", category=UserWarning)
-
-####################################################################################################
-# Drop VINs available in less than 
-
+print(f"Dropped {dropped_dollar_per_mile} vehicles that are not gasoline, hybrid diesel, flex fuel, or phev")
 
 ####################################################################################################
 # Save the final data

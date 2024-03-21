@@ -73,12 +73,14 @@ split = 'None'
 #split = 'geog'
 print_split(split)
 
+save = True
+
 ############################################################################################################
 # set up directories
 if platform.platform()[0:5] == 'macOS':
     cd = pathlib.Path().resolve().parent
     str_project = cd / "Documents" 
-    str_data = "tobin_working_data"
+    str_data = str_project / "tobin_working_data"
     str_rlp = str_data / "rlpolk_data"
     str_sales_vin_characteristic = str_rlp / "rlp_with_dollar_per_mile.csv"
     output_folder = str_project / str_data / "outputs"
@@ -157,6 +159,9 @@ if model == 'logit':
 ################
 # save results #
 ################
+mkt_data.to_csv(output_folder / 'experian_mkt_data.csv',index = False)
+
+
 if save:
     str_time = time.strftime("%Y_%m_%d_%H%M",time.localtime())
     str_results_folder = output_folder / 'demand_results/results_' / version/'_'/str_time
@@ -172,6 +177,7 @@ if save:
     if model == 'logit':
         df_logit.to_csv(str_results_folder/f'demand_params_{str_time}.csv',index = False)
         print(df_logit.to_latex(index = False))
+        print(df_logit)
     elif model == 'nested_logit':
         df_nl.to_csv(str_results_folder+'demand_params.csv',index=False)
     elif model == 'rc':
