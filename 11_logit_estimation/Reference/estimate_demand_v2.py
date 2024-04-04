@@ -134,8 +134,9 @@ mkt_data_keep = mkt_data.copy()
 if model == 'logit':
     # run logit with corrected prices
     # logit_formulation = pyblp.Formulation('0 + prices + dollar_per_mile + electric + phev + electric:CA + phev:CA + hybrid + diesel + log_hp_weight + wheelbase + doors + range_elec + range_elec:CA + C(make) + C(drivetype) + C(bodytype)')
+    # chargers per tsm dropped
     # Updated to get rid of CA for national
-    logit_formulation = pyblp.Formulation('0 + prices + dollar_per_mile + electric + phev + hybrid + diesel + log_hp_weight + wheelbase + doors + range_elec + chargers_per_tsm +  C(make) + C(drivetype) + C(bodytype)')
+    logit_formulation = pyblp.Formulation('0 + prices + dollar_per_mile + electric + phev + hybrid + diesel + log_hp_weight + wheelbase + doors + range_elec +  C(make) + C(drivetype) + C(bodytype)')
 
     problem = pyblp.Problem(logit_formulation, mkt_data)
     logit_results_price_updated = problem.solve()

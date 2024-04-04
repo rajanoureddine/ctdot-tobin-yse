@@ -71,6 +71,8 @@ df_electricity.columns = df_electricity.columns.str.lower()
 
 ####################################################################################################
 # Calculate log horsepower to weight
+# First divided the curb weight by 1000
+df_rlp["curb_weight"] = df_rlp["curb_weight"] / 1000
 df_rlp["log_hp_wt"] = np.log(df_rlp["max_hp"] / df_rlp["curb_weight"])
 
 ####################################################################################################
@@ -143,14 +145,14 @@ df_rlp = df_rlp.dropna(subset = ["dollar_per_mile"])
 print(f"Dropped {dropped_dollar_per_mile} vehicles that are not gasoline, hybrid diesel, flex fuel, or phev")
 
 ####################################################################################################
+# Now we group by model year, make, model, and trim 
+num_unique_vins = len(df_rlp["vin_pattern"].unique())
+unique_vehicles = df_rlp[['model_year', 'make', 'model', 'trim']].drop_duplicates()
+num_unique_vehicles = len(unique_vehicles)
+print(f"Number of unique VINs: {num_unique_vins}")
+print(f"Number of unique vehicles: {num_unique_vehicles}")
+
+####################################################################################################
 # Save the final data
 str_rlp_final = str_rlp_data / "rlp_with_dollar_per_mile.csv"
 df_rlp.to_csv(str_rlp_final, index = False)
-
-####################################################################################################
-# Save data per market (i.e. county)
-str_rlp_final_market = str_rlp_data / "rlp_with_dollar_per_mile_market.csv"
-
-# Group by product and market
-df_rlp_market = df_rlp.groupby(["vin_pattern", "county_name"]).sum().reset_index()
-df_rlp_market = df_rlp_market.drop(columns = ["report_year", "report_month"])

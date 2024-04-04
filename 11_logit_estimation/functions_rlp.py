@@ -34,9 +34,6 @@ def read_census_data(path):
     df_census["county"] = df_census["county"].str.replace(" County", "")
     df_census["county"] = df_census["county"].str.upper()
 
-    # Get rid of aggregate figure
-    df_census = df_census.loc[~df_census["county"].str.contains("CONNECTICUT"), :]
-
     return df_census
 
 def aggregate_to_market(df, market_ids, product_ids, sales_col):
@@ -62,21 +59,34 @@ def aggregate_to_market(df, market_ids, product_ids, sales_col):
 
     return sales_per_market
 
-def drop_uncommon_products(df):
+
+def match_makes_models(df1, df2, match_on = ["make", "model"]):
+    df1_old = df1.copy()
+    df2_old = df2.copy()
+
+    df2 = df2[match_on].drop_duplicates()
+
+    # Keep only the makes and models in df1 that are in df2
+    df1 = df1.merge(df2, on = match_on, how = "inner")
+
+    return df1
+
+
+def drop_uncommon_products(df, mkt_ids, num):
     """
     Drops products that do not occur in a large number of counties across the sample.
     """
 
     # Get the number of counties each product occurs in
-    vins_counties = df[["vin_pattern", "county_name"]].drop_duplicates()
+    vins_counties = df[["vin_pattern", mkt_ids]].drop_duplicates()
     vins_counties = vins_counties.groupby("vin_pattern").size().reset_index(name = 'count').sort_values(by = "count", ascending = False)
 
     # Mark the products that occur in more than 7 counties
-    vins_counties["keep"] = vins_counties["count"] >= 7
+    vins_counties["keep"] = vins_counties["count"] >= num
 
     # Record number in less than 7 counties
-    uncommon_products = vins_counties.loc[vins_counties["count"] < 7, "vin_pattern"].nunique()
-    common_products = vins_counties.loc[vins_counties["count"] >= 7, "vin_pattern"].nunique()
+    uncommon_products = vins_counties.loc[vins_counties["count"] < num, "vin_pattern"].nunique()
+    common_products = vins_counties.loc[vins_counties["count"] >= num, "vin_pattern"].nunique()
     print(f"Found {common_products} / {uncommon_products + common_products} products that occur in at least 7 counties")
     
     # Merge back in
@@ -89,28 +99,85 @@ def drop_uncommon_products(df):
 
     return df
 
-def merge_vin_census(vin_data,census_data):
+def normalize_markets(df, mkt_ids, num = 3):
+    """
+    Get the makes and models that occur in most model years.
+    NOTE: Every VIN pattern is only available in a single model year, so we use make model trim as our product IDs.
+    """
+    # Set product IDs
+    product_ids = ["make", "model", "trim"]
+
+    # Get the number of model years each make, model, trim occurs in
+    makes_models_my = df[[mkt_ids]+product_ids].drop_duplicates()
+    makes_models = makes_models_my.groupby(product_ids).size().reset_index(name = 'product_count').sort_values(by = "product_count", ascending = False)
+
+    # Get the sales per make, model, trim
+    makes_models_sales = df.groupby(product_ids).agg({"veh_count": "sum"}).reset_index()
+    makes_models = makes_models.merge(makes_models_sales, on = product_ids, how = "left")
+
+    makes_models.loc[makes_models["product_count"] >= num, "keep"] = 1
+    makes_models.loc[makes_models["product_count"] < num, "keep"] = 0
+
+    # Merge back in
+    df = df.merge(makes_models[product_ids+["keep"]], on = product_ids, how = "left")
+
+    # Record what we dropped
+    num_sales_dropped = df[df["keep"] == 0]["veh_count"].sum()
+    num_makes_models_dropped = df[df["keep"] == 0][["make", "model", "trim"]].drop_duplicates().shape[0]
+    print(f"Dropping {num_sales_dropped} sales for makes and models observed in less than {num} model years.")
+    print(f"Dropping {num_makes_models_dropped} makes and models observed in less than {num} model years.")
+
+    # Drop and clean up
+    df = df.loc[df["keep"] == 1, :]
+    df = df.drop(columns = ["keep"])
+
+    return df
+
+
+
+
+
+
+
+def merge_vin_census(vin_data,census_data, mkt_ids = "county_name"):
     """
     Merge the VIN data with the census data.
     """
     # Merge the VIN data with the census data
-    print("Merging the VIN data with the census data - we merge on county only")
-    df = vin_data.merge(census_data, left_on = "county_name", right_on = "county", how = "left")
-    assert(len(df) == len(vin_data)), "Merge did not match the correct number of rows"
-    assert(df.veh_count.sum() == vin_data.veh_count.sum()), "Merge affected the number of sales"
-    assert(df["tot_HH"].isnull().sum() == 0), "Merge did not match all rows"
+    if mkt_ids == "county_name":
+        print("Merging the VIN data with the census data - we merge on county only")
 
-    # Drop the extra column from the census data
-    df = df.drop(columns = ["county"])
+        # Get rid of aggregate figure
+        census_data = census_data.loc[~census_data["county"].str.contains("CONNECTICUT"), :]
+
+        df = vin_data.merge(census_data, left_on = "county_name", right_on = "county", how = "left")
+        assert(len(df) == len(vin_data)), "Merge did not match the correct number of rows"
+        assert(df.veh_count.sum() == vin_data.veh_count.sum()), "Merge affected the number of sales"
+        assert(df["tot_HH"].isnull().sum() == 0), "Merge did not match all rows"
+
+        # Drop the extra column from the census data
+        df = df.drop(columns = ["county"])
+        
+        return df
     
-    return df
+    else:
+        total_ct_pop = census_data.loc[census_data["county"].str.contains("CONNECTICUT"), : "tot_HH"].values[0][1]
+        print(f"Total number of households in Connecticut: {total_ct_pop}")
+        df = vin_data.copy()
+        df["tot_HH"] = total_ct_pop
 
-def clean_market_data(mkt_data):
+        return df
+
+
+def clean_market_data(mkt_data, mkt_ids):
     # Save original length
     orig_len = len(mkt_data)
 
     # drop observations with missing data
     mkt_data = mkt_data.dropna(subset=['tot_HH','dollar_per_mile','curb_weight','drive_type']).reset_index(drop=True)
+
+    # A product ID is a combination of make, model, and trim
+    # mkt_data['product_ids'] = mkt_data['make'] + "_" + mkt_data['model'] + "_" +  mkt_data['trim']
 
     # Create product IDs
     mkt_data['product_ids'] = mkt_data['vin_pattern']
@@ -140,7 +207,7 @@ def clean_market_data(mkt_data):
     mkt_data = mkt_data.loc[mkt_data.shares > np.percentile(mkt_data.shares,5)].reset_index(drop = True)
 
     # Create market id for pyblp
-    mkt_data["market_ids"] = mkt_data["county_name"]
+    mkt_data["market_ids"] = mkt_data[mkt_ids]
 
     # Get prices 
     mkt_data['prices'] = mkt_data.msrp
@@ -168,10 +235,10 @@ def clean_market_data(mkt_data):
 
     return mkt_data
 
-def calc_outside_good(mkt_data):
-    outside_good = mkt_data[['county_name','shares']].groupby(['county_name']).sum().reset_index()
+def calc_outside_good(mkt_data, mkt_ids):
+    outside_good = mkt_data[[mkt_ids,'shares']].groupby([mkt_ids]).sum().reset_index()
     outside_good['outside_share'] = 1 - outside_good.shares
-    mkt_data = pd.merge(mkt_data,outside_good[['county_name','outside_share']],how='left',on=['county_name'])
+    mkt_data = pd.merge(mkt_data,outside_good[[mkt_ids,'outside_share']],how='left',on=[mkt_ids])
 
     return mkt_data
 
