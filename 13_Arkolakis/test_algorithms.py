@@ -1,7 +1,9 @@
 import numpy as np
 import pandas as pd
 import pytest
-from bellman_ford import Graph, Path, GraphExtended
+from bellman_ford import Graph
+from path import Path
+from bf_extended import GraphExtended
 pd.set_option('display.max_columns', None)
 pd.set_option('display.max_rows', None)
 
@@ -22,7 +24,7 @@ def setup_graph():
                 g.addEdge(i, j, graph_weights[i][j])
                 g_e.addEdge(i, j, graph_weights[i][j])
     assert(np.array_equal(g.graph, g_e.graph))
-    print(pd.DataFrame(graph_weights))
+    # print(pd.DataFrame(graph_weights))
     yield(g, g_e, graph, graph_weights)
 
 
@@ -45,6 +47,23 @@ def setup_bf_extended():
 
     g.BellmanExtended(0, 5)
     yield(g)
+
+@pytest.fixture
+def setup_bf_extended_1():
+    g = GraphExtended(7, 2, np.array([np.infty, 47]))
+    for i in range(1, 4):
+        g.addEdge(i-1, i, [10, 17])
+    
+    g.addEdge(1, 4, [20,-30])
+    g.addEdge(4,2, [10,17])
+    g.addEdge(0,5,[12,16])
+    g.addEdge(5,6, [12,16])
+    g.addEdge(6,3, [12,16])
+
+    yield(g)
+
+
+
 
 def test_weight_numbers():
     # Test that it won't accept too many weights
@@ -142,9 +161,10 @@ def test_BF_extended_path_distances(setup_graph):
     for i in range(len(g_e.path)):
         flag = True
         dist = g_e.path[i][0].weight_sum
-        for j in range(1, len(g_e.path[i])):
+        for j in range(0, len(g_e.path[i])):
             flag = (g_e.path[i][j].weight_sum == dist)
-        assert(flag)
+            assert(flag)
+
 
 def test_BF_BF_extended(setup_graph, capfd):
     g, g_e, _, graph_weights = setup_graph
@@ -154,3 +174,8 @@ def test_BF_BF_extended(setup_graph, capfd):
     out2, err2 = capfd.readouterr()
     assert(out1 == out2)
     assert(np.array_equal(g.graph, g_e.graph))
+
+def test_BF_extended_1(setup_bf_extended_1):
+    bfe = setup_bf_extended_1
+    bfe.BellmanExtended(0,3)
+
