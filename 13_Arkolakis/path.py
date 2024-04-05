@@ -29,6 +29,13 @@ class Path:
         edge weights on each link in the path. (i.e. the number of QoS metrics)
         """
         return np.all(np.less_equal(self.weight_sum, constraints))
+
+    def repeat_visits(self):
+        counts = [self.path.count(x) for x in list(set(self.path))]
+        if np.any([x > 1 for x in counts]):
+            return True
+        else:
+            return False
     
     def __add__(self, p2):
         if (p2.path[0] != self.path[-1]):

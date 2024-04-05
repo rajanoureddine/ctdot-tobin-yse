@@ -34,8 +34,7 @@ class GraphExtended():
                     # New to add
                     new_path = p + uv # Add this new route to v
 
-                    # Check it's within the constraints
-                    if new_path.weights_leq(self.constraints):
+                    if new_path.weights_leq(self.constraints) and not new_path.repeat_visits():
 
                         # If it's within the constraints, check 
                         flag = True
@@ -85,8 +84,11 @@ class GraphExtended():
                 paths = [p.path for p in self.path[i]]
                 weights = [p.weight_sum for p in self.path[i]]
             else:
-                paths = [self.path[i][0].path]
-                weights = [self.path[i][0].weight_sum]
+                try:
+                    paths = [self.path[i][0].path]
+                    weights = [self.path[i][0].weight_sum]
+                except:
+                    pass
             for j in range(len(paths)):
                 print(f"Node {i} path {j}\tWeights: {weights[j]}\tPath:{paths[j]}")
             print("-------------------------------------")
