@@ -37,21 +37,27 @@ class RoadNetwork():
             for j in range(self.size**2):
                 if not charging:
                     self.weight_matrix[i,j] = 1
-                if charging:
+                elif charging:
                     self.weight_matrix[i,j] = np.random.choice([-1,1], 1, p = [0.3, 0.7])[0]
+
 
 
     def load_graph(self, constraint):
         """Loads the graph with the adjacency data.
         For now, assume each link has length 1"""
 
+        constraint = np.array([constraint]).reshape(-1)
+
         # Create the graph
-        self.g = GraphExtended(self.size**2, 1, np.array([constraint]))
+        self.g = GraphExtended(self.size**2, 1, constraint)
 
         for i in range((self.size**2)):
             for j in range((self.size**2)):
                 if self.adjacency[i,j] == 1:
-                    self.g.addEdge(i,j, self.weight_matrix[i,j])
+                        if len(constraint) == 1:
+                            self.g.addEdge(i,j, self.weight_matrix[i,j])
+                        elif len(constraint) > 1:
+                            self.g.addEdge(i,j, [1, self.weight_matrix[i,j]])
 
     def get_path(self, src, dest):
         self.g.BellmanExtended(src, dest, False)
@@ -96,22 +102,22 @@ class RoadNetwork():
                     ax.plot(x_vals, y_vals, 'o', linestyle = '-', color = 'red', linewidth = 3, zorder = 15)
                 else:
                     ax.plot(x_vals, y_vals, 'o', linestyle = '-', color = 'purple', linewidth = 3, zorder = 15)
-            fig.suptitle(f"Path: {','.join([str(x) for x in path])}")
+            fig.suptitle(f"Path: {','.join([str(x) for x in path])}", y = 0.90)
         elif plot_path and not path:
-            fig.suptitle("No solution found", y = 0.93)
+            fig.suptitle("No solution found", y = 0.90)
 
         plt.show()
 
 
 
 if __name__ == '__main__':
-    r = RoadNetwork(10)
+    r = RoadNetwork(7)
     r.generate_adjacency()
     r.generate_weights(charging=False)
     r.plot_network()
-    r.load_graph(10)
-    r.get_path(0, 99)
+    r.load_graph(7)
+    r.get_path(0, 48)
     r.generate_weights(charging=True)
     r.plot_network()
-    r.load_graph(10)
-    r.get_path(0, 99)
+    r.load_graph([np.infty, 7])
+    r.get_path(0, 48)

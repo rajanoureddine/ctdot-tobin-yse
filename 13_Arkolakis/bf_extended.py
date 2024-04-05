@@ -44,32 +44,56 @@ class GraphExtended():
                         # add it dropping q, or don't add it and keep q. 
                         if self.path[v]:
                             for q in self.path[v]:
-                                # Case 1: If q is better on every metric than new path
-                                if np.all(np.less(q.weight_sum, new_path.weight_sum)):
+                                # Case 0: If they are the same path, don't add a new path
+
+                                # Case 1: if q is less than new_path for the minimization metric, then we don't need to consider the new path
+                                if (len(self.constraints) == 1) and np.less(q.weight_sum, new_path.weight_sum):
+                                        flag = False
+                                        break
+                                elif (len(self.constraints) > 1) and np.less(q.weight_sum[0], new_path.weight_sum[0]):
                                     flag = False
-                                    break # don't need to consider any more 
+                                    break
+
+                                # Case 2: If q is greater than new_path for the minimization metric, then we drop q
+                                if (len(self.constraints) == 1) and np.greater(q.weight_sum, new_path.weight_sum):
+                                    add_path_flag = True # We will be adding a path
+                                    self.path[v].remove(q)
+                                    break
+                                elif (len(self.constraints) > 1) and np.greater(q.weight_sum[0], new_path.weight_sum[0]):
+                                    add_path_flag = True # We will be adding a path
+                                    self.path[v].remove(q)
+
+                                # Case 3: If q is the same as new_path for the minimization metric, then we consider the others
+
+                            
+                                # Case 1: If q is better on every metric than new path
+                                # if np.all(np.less(q.weight_sum, new_path.weight_sum)):
+                                #    flag = False
+                                #    break # don't need to consider any more 
 
                                 # Case 2: If np is either the same as q for all metrics, less than
                                 # q for all metrics, or a mix of being the same and better
-                                if np.all(np.less_equal(new_path.weight_sum, q.weight_sum)):
-                                    add_path_flag = True # We will be adding a path
-                                    
-                                    # Case 2b: If new path is not the same for all metrics (that means
-                                    # it's the same for some metrics, and better for others).
-                                    # Thus we remove q
-                                    if not np.all(np.equal(new_path.weight_sum, q.weight_sum)):
-                                        self.path[v].remove(q)
-                                    
-                                    # If they're the same path, don't add a new path
-                                    elif new_path.path == q.path:
-                                        add_path_flag = False
-                                        break
+                                # if np.all(np.less_equal(new_path.weight_sum, q.weight_sum)):
+                                #     add_path_flag = True # We will be adding a path
+                                #     
+                                #     # Case 2b: If new path is not the same for all metrics (that means
+                                #     # it's the same for some metrics, and better for others).
+                                #     # Thus we remove q
+                                #     if not np.all(np.equal(new_path.weight_sum, q.weight_sum)):
+                                #         self.path[v].remove(q)
+                                #     
+                                #     # If they're the same path, don't add a new path
+                                #     elif new_path.path == q.path:
+                                #         add_path_flag = False
+                                #         break
                                         
                         if flag == True:
                             if self.path[v] and add_path_flag:
                                 self.path[v].append(new_path)
                             elif not self.path[v]:
                                 self.path[v] = [new_path]
+                            if v == dest:
+                                break
 
         if print_result:
             self.printPaths()
