@@ -102,10 +102,9 @@ def setup_comparison_data():
     yield df
 
 ####################################################################################################
-def test_veh_chars_raw(setup_rlp_data, setup_rlp_estimation_data, setup_experian_data):
+def test_veh_chars_raw(setup_rlp_data, setup_rlp_estimation_data, setup_exp_estimation_data):
     df_rlp_est_ct, df_rlp_est_my = setup_rlp_estimation_data
-    # df_rlp, _ = setup_rlp_data
-    df_experian = setup_experian_data
+    df_experian = setup_exp_estimation_data
 
     df_rlp = df_rlp_est_my
 
@@ -114,15 +113,16 @@ def test_veh_chars_raw(setup_rlp_data, setup_rlp_estimation_data, setup_experian
     df_experian = df_experian.rename(columns = {"curbwt": "curb_weight", "year": "model_year"})
 
     # Note variables to compare
-    vars_to_compare = ["make", "model","model_year", "trim", "fuel", "msrp", "doors", "curb_weight", "max_hp", "log_hp_weight", "wheelbase", "range_elec"]
+    vars_to_compare = ["make", "model","model_year", "trim", "fuel", "msrp", "doors", "curb_weight", "max_hp", "dollar_per_mile", "log_hp_weight", "wheelbase", "range_elec"]
 
     # Get unique make, model, model_year combinations, and for each calculate a mean dollars_per_mile
     unique_vehs = df_rlp[vars_to_compare].drop_duplicates()
-    dpm = df_rlp.groupby(vars_to_compare)["dollar_per_mile"].mean().reset_index()
-    unique_vehs = unique_vehs.merge(dpm, on = vars_to_compare, how = "left")
+    print(len(unique_vehs))
+    # dpm = df_rlp.groupby(vars_to_compare)["dollar_per_mile"].mean().reset_index()
+    # unique_vehs = unique_vehs.merge(dpm, on = vars_to_compare, how = "left")
 
     # Update variables
-    vars_to_compare = vars_to_compare + ["dollar_per_mile"]
+    # vars_to_compare = vars_to_compare + ["dollar_per_mile"]
 
     # Define function to compare
     def get_comparisons(rlp_data, exp_data, vars_to_compare):

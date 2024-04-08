@@ -105,7 +105,7 @@ def normalize_markets(df, mkt_ids, num = 3):
     NOTE: Every VIN pattern is only available in a single model year, so we use make model trim as our product IDs.
     """
     # Set product IDs
-    product_ids = ["make", "model", "trim"]
+    product_ids = ["product_ids"]
 
     # Get the number of model years each make, model, trim occurs in
     makes_models_my = df[[mkt_ids]+product_ids].drop_duplicates()
@@ -180,7 +180,7 @@ def clean_market_data(mkt_data, mkt_ids):
     # mkt_data['product_ids'] = mkt_data['make'] + "_" + mkt_data['model'] + "_" +  mkt_data['trim']
 
     # Create product IDs
-    mkt_data['product_ids'] = mkt_data['vin_pattern']
+    # mkt_data['product_ids'] = mkt_data['make']+"_"+mkt_data['model']+"_"+mkt_data['trim']
 
     # shift dollar per mile to dollar/100 mile
     mkt_data.dollar_per_mile*=100
@@ -324,9 +324,6 @@ def generate_pyblp_instruments(mkt_data):
 
     demand_instruments_discrete = np.array([iv1.ct_rival.values,iv2.ct_same.values]).T
 
-    # wage instruments
-    # demand_instruments_wage = np.reshape(np.array(instrument_data.wages),(-1,1))
-
     # combine discrete and continue instruments into a single array
     demand_instruments = np.concatenate((demand_instruments_continuous1,demand_instruments_continuous2,demand_instruments_discrete),axis=1)
     #demand_instruments = np.concatenate((demand_instruments_continuous1,demand_instruments_continuous2,demand_instruments_discrete),axis=1)
@@ -341,68 +338,6 @@ def generate_pyblp_instruments(mkt_data):
     mkt_data = pd.merge(mkt_data,instrument_data[col_names +['product_ids', 'market_ids']],
                         how='left',on=['product_ids', 'market_ids'])
     
-    # add rebate to instrument set
-    #mkt_data['demand_instruments'+str(demand_instruments.shape[1]+1)] = mkt_data.rebate
-
-    if False:
-        # generate instruments at national level!
-        instrument_data = mkt_data[['product_ids','firm_ids','model_year','wheelbase','curbwt','doors','log_hp_weight','drivetype','bodytype','wages']].drop_duplicates().reset_index(drop=True)
-        instrument_data['market_ids'] =  instrument_data.model_year
-
-        # original BLP instruments
-        if(False):
-            demand_instruments = pyblp.build_blp_instruments(pyblp.Formulation('0 + wheelbase + doors + curbwt + C(bodytype)'), instrument_data)
-        #demand_instruments = pyblp.build_differentiation_instruments(pyblp.Formulation('0+ wheelbase + doors + max_hp + C(bodytype)'), mkt_data,version='quadratic')
-        #demand_instruments = pyblp.build_differentiation_instruments(pyblp.Formulation('0+ wheelbase + curbwt'), instrument_data,version='quadratic')
-
-        # improved instruments
-        # separate differentiation instruments (continuous chars) AND discrete instrument (for each product, count own- and rival- products with same values)
-        demand_instruments_continuous1 = pyblp.build_differentiation_instruments(pyblp.Formulation('0 + wheelbase + curbwt'), instrument_data)
-        demand_instruments_continuous2 = pyblp.build_differentiation_instruments(pyblp.Formulation('0 + wheelbase + curbwt'), instrument_data, version='quadratic')
-        # discrete instruments
-        lst_discrete_chars = ['doors','drivetype','bodytype']
-        data_small = instrument_data[['market_ids','firm_ids'] + lst_discrete_chars]
-        count_unique = data_small.groupby(['market_ids','firm_ids'] + lst_discrete_chars).size().reset_index(name = 'ct')
-        # for each vehicle, count of rival vehicles with same discrete chars in same market
-        count_rival_all = pd.DataFrame()
-        for firm in data_small.firm_ids.unique():
-            count_unique_diff = count_unique.loc[count_unique.firm_ids != firm]
-            count_unique_diff = count_unique_diff.groupby(['market_ids'] + lst_discrete_chars).sum().reset_index()
-            count_unique_diff = count_unique_diff.rename(columns={'ct':'ct_rival'})
-            count_unique_diff['firm_ids'] = firm
-            count_rival_all = pd.concat([count_rival_all,count_unique_diff])
-
-        iv1 = pd.merge(data_small,count_rival_all,how='left',on=['market_ids','firm_ids'] + lst_discrete_chars)
-        iv1.loc[iv1.ct_rival.isna(),'ct_rival'] = 0
-
-        # for each vehicle, count of non-rival vehicles with same discrete chars in same market
-        count_unique_same = count_unique.copy()
-        count_unique_same['ct_same'] = count_unique_same.ct -1
-
-        iv2 = pd.merge(data_small,count_unique_same,how='left',on=['market_ids','firm_ids'] + lst_discrete_chars)
-
-        demand_instruments_discrete = np.array([iv1.ct_rival.values,iv2.ct_same.values]).T
-
-        # wage instruments
-        demand_instruments_wage = np.reshape(np.array(instrument_data.wages),(-1,1))
-        # combine discrete and continue instruments into a single array
-        demand_instruments = np.concatenate((demand_instruments_continuous1,demand_instruments_continuous2,demand_instruments_discrete,demand_instruments_wage),axis=1)
-        #demand_instruments = np.concatenate((demand_instruments_continuous1,demand_instruments_continuous2,demand_instruments_discrete),axis=1)
-
-        # add instruments back into data
-        col_names = ['demand_instruments' + str(x) for x in range(0,demand_instruments.shape[1])]
-        instrument_data = pd.concat([instrument_data,
-                                    pd.DataFrame(demand_instruments,
-                                                columns=col_names)
-                                    ],axis=1)
-        # merge instruments back
-        mkt_data = pd.merge(mkt_data,instrument_data[col_names +['product_ids']],
-                            how='left',on='product_ids')
-
-        # add rebate to instrument set
-        #mkt_data['demand_instruments'+str(demand_instruments.shape[1]+1)] = mkt_data.rebate
-        return mkt_data
-
 
     return mkt_data
 

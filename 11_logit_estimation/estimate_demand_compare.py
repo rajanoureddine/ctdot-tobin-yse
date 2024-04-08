@@ -92,13 +92,16 @@ exp_trims = exp_mkt_data.trim.unique()
 
 ############################################################################################################
 # We now prepare the RLP data, aiming to make it as similar as possible to the Experian data
-def prepare_rlp_data(match_model_years = False, match_vehicles = False, drop_uncommon = True):
+def prepare_rlp_data(product_ids = ['make', 'model', 'trim'], match_model_years = False, match_vehicles = False, drop_uncommon = True):
     # read in VIN data - file of approx 100000 rows, including car characteristics
     vin_data = pd.read_csv(str_sales_vin_characteristic)
     orig_vin_data = vin_data.copy()
 
+    # Create product_id column
+    vin_data["product_ids"] = vin_data[product_ids].apply(lambda x: '_'.join(x), axis = 1)
+
     # Drop unnecessary columns
-    unneeded_cols = ['fuel_type', 'transaction_price', 'sp_id', 'sp_make', 'sp_model', 'sp_model_year', 'zip_code' , 'vin_orig', 'vehicle_id', 'plant']
+    unneeded_cols = ['vin_pattern', 'fuel_type', 'transaction_price', 'sp_id', 'sp_make', 'sp_model', 'sp_model_year', 'zip_code' , 'vin_orig', 'vehicle_id', 'plant']
     vin_data = vin_data.drop(columns = unneeded_cols)
 
     if match_model_years:
@@ -115,25 +118,25 @@ def prepare_rlp_data(match_model_years = False, match_vehicles = False, drop_unc
     if drop_uncommon and rlp_market != 'model_year':
         vin_data = rlp_functions.drop_uncommon_products(vin_data, rlp_market, 7)
     elif drop_uncommon and rlp_market == 'model_year':
-        vin_data = rlp_functions.normalize_markets(vin_data, rlp_market, num = 4)
+        vin_data = rlp_functions.normalize_markets(vin_data, rlp_market, num = 5)
 
     orig_sales = vin_data.veh_count.sum()
-    orig_products = vin_data.vin_pattern.nunique()
+    orig_products = vin_data.product_ids.nunique()
 
     # Get firm ids
     vin_data = rlp_functions.generate_firm_ids(vin_data, str_mapping)
     assert(orig_sales == vin_data.veh_count.sum()), "Sales should not change after dropping uncommon products"
-    assert(orig_products == vin_data.vin_pattern.nunique()), "Products should not change after dropping uncommon products"
+    assert(orig_products == vin_data.product_ids.nunique()), "Products should not change after dropping uncommon products"
 
     # Get dummies for electric, phev, hybrid, diesel
     vin_data = rlp_functions.generate_fuel_type_dummies(vin_data)
     assert(orig_sales == vin_data.veh_count.sum()), "Sales should not change after generating fuel type dummies"
-    assert(orig_products == vin_data.vin_pattern.nunique()), "Products should not change after generating fuel type dummies"
+    assert(orig_products == vin_data.product_ids.nunique()), "Products should not change after generating fuel type dummies"
 
     # Aggregate to market level
-    vin_data_aggregated = rlp_functions.aggregate_to_market(vin_data, rlp_market, "vin_pattern", "veh_count")
+    vin_data_aggregated = rlp_functions.aggregate_to_market(vin_data, rlp_market, "product_ids", "veh_count")
     assert(orig_sales == vin_data_aggregated.veh_count.sum()), "Sales should not change after aggregating to market level"
-    assert(orig_products == vin_data_aggregated.vin_pattern.nunique()), "Products should not change after aggregating to market level"
+    assert(orig_products == vin_data_aggregated.product_ids.nunique()), "Products should not change after aggregating to market level"
 
     # Read in census data - contains total number of households for each county in Connecticut
     census_data = rlp_functions.read_census_data(str_data / "other_data" / "total-households-county-2019.csv")
@@ -141,7 +144,7 @@ def prepare_rlp_data(match_model_years = False, match_vehicles = False, drop_unc
     # Merge the VIN data with the census data
     mkt_data = rlp_functions.merge_vin_census(vin_data_aggregated, census_data, rlp_market)
     assert(orig_sales == mkt_data.veh_count.sum()), "Sales should not change after merging with census data"
-    assert(orig_products == mkt_data.vin_pattern.nunique()), "Products should not change after merging with census data"
+    assert(orig_products == mkt_data.product_ids.nunique()), "Products should not change after merging with census data"
 
     # Clean the market data
     mkt_data = rlp_functions.clean_market_data(mkt_data, rlp_market)
@@ -158,7 +161,7 @@ def prepare_rlp_data(match_model_years = False, match_vehicles = False, drop_unc
 
     return mkt_data
 
-rlp_mkt_data = prepare_rlp_data()
+rlp_mkt_data = prepare_rlp_data(match_vehicles=True)
 rlp_mkt_data = rlp_mkt_data.rename(columns = {'log_hp_wt':'log_hp_weight', 'drive_type':'drivetype', 'body_type':'bodytype'})
 rlp_mkt_data.to_csv(estimation_test / f'mkt_data_{rlp_market}.csv',index = False)
 
