@@ -64,7 +64,6 @@ vars = list(agg_funs.keys())
 
 
 ####################################################################################################
-
 # Step 1: Identify the most common trim per make and model
 def get_most_common_trim(df, sales_col, separate_electric = True):
     """Get the most common trim for each make and model."""
@@ -93,7 +92,7 @@ def get_most_common_trim(df, sales_col, separate_electric = True):
 
     return most_common_trim
 
-most_common_trims = get_most_common_trim(df_rlp, sales_col)
+# most_common_trims = get_most_common_trim(df_rlp, sales_col)
 
 # Step 2: Calculate the features for each of these products.
 # To do this, we take all instances of that product (for a given model year) and average the features.
@@ -128,8 +127,52 @@ def get_most_common_trim_features(df, most_common_trims):
     
     return output
 
-most_common_trim_features = get_most_common_trim_features(df_rlp, most_common_trims)
-most_common_trim_features.to_csv(output_folder / f"most_common_trim_features_{date_time}.csv", index=False)
+# most_common_trim_features = get_most_common_trim_features(df_rlp, most_common_trims)
+# most_common_trim_features.to_csv(output_folder / f"most_common_trim_features_{date_time}.csv", index=False)
 
+most_common_trim_features = pd.read_csv(output_folder / "most_common_trim_features_20240409_132632.csv")
+
+# Step 3: In the original data frame, go through each make, model, fuel, and range_elec and replace with the most common trim
+# and the most common trim features for that model year
+def replace_with_most_common_trim(df, most_common_trim_features):
+    """Replace the make, model, trim, fuel, and range_elec with the most common trim for that model year."""
+
+    # Prepare a column to record successful merges
+    most_common_trim_features["merge_success"] = 1
+
+    # Get the columns to merge on and to keep
+    cols_merge_on = ["make", "model", "model_year", "fuel", "range_elec"]
+    cols_merge_on_noyear = ["make", "model", "fuel", "range_elec"]
+    cols_to_keep = ["veh_count", "county_name"]
+
+    # Merge the most common trim features with the original data frame
+    df_to_keep = df[cols_merge_on + cols_to_keep]
+    output = df_to_keep.merge(most_common_trim_features.iloc[:, ~most_common_trim_features.columns.isin(["veh_count"])], on=cols_merge_on, how="left")
+
+    # Confirm this has worked correctly
+    assert(len(output) == len(df))
+    assert(output["veh_count"].sum() == df["veh_count"].sum())
+
+    # Note that in some cases, the most common trim is not available for that model year
+    # In these cases, we will have NaNs in the output. We get closest available model year
+    output_merged = output.loc[output["merge_success"] == 1]
+    output_not_merged = output.loc[output["merge_success"] != 1, cols_merge_on + cols_to_keep]
+
+    # Get the model year with the highest sales for each make, model, trim, fuel, and range_elec
+    most_common_trim_features_top = most_common_trim_features.sort_values("veh_count", ascending=False).drop_duplicates(cols_merge_on_noyear)
+
+    # Merge back in for the not merged rows
+    output_not_merged = output_not_merged.merge(most_common_trim_features_top.iloc[:, ~most_common_trim_features_top.columns.isin(["model_year", "veh_count"])], on=cols_merge_on_noyear, how="left")
+
+    # Combine the two data frames
+    output = pd.concat([output_merged, output_not_merged], axis=0)
+
+    # Confirm this has worked correctly
+    assert(len(output) == len(df))
+    assert(output["veh_count"].sum() == df["veh_count"].sum())
+
+    return output
+
+df_replaced = replace_with_most_common_trim(df_rlp[df_rlp["fuel"]!="electric"], most_common_trim_features)
 
 
