@@ -193,8 +193,6 @@ if __name__ == '__main__':
         r.plot_network()
         r.load_graph(10)
         r.get_path(0, 99)
-        r.load_graph(10)
-        r.get_path(0, 99)
         r.generate_weights(charging=True)
 
     r.plot_network()

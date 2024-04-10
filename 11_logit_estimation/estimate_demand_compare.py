@@ -114,7 +114,7 @@ def prepare_rlp_data(product_ids = ['make', 'model', 'trim'], match_model_years 
 
     # Different ways to remove uncommon products.
     # - If using counties, then drop those products that are not in at least 7 counties
-    # - Drop those make, models, and trims that are not in at least 4 model years
+    # - Drop those make, models, and trims that are not in at least 5 model years
     if drop_uncommon and rlp_market != 'model_year':
         vin_data = rlp_functions.drop_uncommon_products(vin_data, rlp_market, 7)
     elif drop_uncommon and rlp_market == 'model_year':
