@@ -80,6 +80,7 @@ def get_most_common_trim(df, sales_col, separate_electric = True):
         trim_sales = trim_sales.loc[trim_sales["fuel"] != "electric"]
 
     # Get the most common trim for each make, model, and range_elec (for electric only)
+    # Note - we get the most common trim across all possible years 
     max_within = lambda x: x.loc[x[sales_col].idxmax()]
     most_common_trim = trim_sales.groupby(["make", "model", "fuel", "range_elec"]).apply(max_within).reset_index(drop=True)
     most_common_trim = most_common_trim.drop(columns=[sales_col])
@@ -133,6 +134,10 @@ def get_most_common_trim_features(df, most_common_trims):
 # most_common_trim_features.to_csv(output_folder / f"most_common_trim_features_{date_time}.csv", index=False)
 
 most_common_trim_features = pd.read_csv(output_folder / "most_common_trim_features_20240411_123942.csv")
+
+# Quick test that within each make, model, model_year, trim, fuel, and range_elec the features are all the same. 
+test = most_common_trim_features.drop_duplicates(subset=["make", "model", "model_year", "trim", "fuel", "range_elec"])
+assert(len(most_common_trim_features)==len(test))
 
 # Step 3: In the original data frame, go through each make, model, fuel, and range_elec and replace with the most common trim
 # and the most common trim features for that model year
@@ -191,11 +196,38 @@ def replace_with_most_common_trim(df, most_common_trim_features, electric = Fals
     return output
 
 # Replace details for electric and non-electric separately
-df_replaced_nelec = replace_with_most_common_trim(df_rlp.loc[df_rlp["fuel"]!="electric"], most_common_trim_features)
-df_replaced_elec = replace_with_most_common_trim(df_rlp.loc[df_rlp["fuel"]=="electric"], most_common_trim_features, electric = True)
-df_replaced = pd.concat([df_replaced_nelec, df_replaced_elec])
+# df_replaced_nelec = replace_with_most_common_trim(df_rlp.loc[df_rlp["fuel"]!="electric"], most_common_trim_features)
+# df_replaced_elec = replace_with_most_common_trim(df_rlp.loc[df_rlp["fuel"]=="electric"], most_common_trim_features, electric = True)
+# df_replaced = pd.concat([df_replaced_nelec, df_replaced_elec])
 
 # Save
-df_replaced.to_csv(output_folder / f"rlp_with_dollar_per_mile_replaced_{date_time}.csv", index = False)
+# df_replaced.to_csv(output_folder / f"rlp_with_dollar_per_mile_replaced_{date_time}.csv", index = False)
+
+df_replaced = pd.read_csv(output_folder / "rlp_with_dollar_per_mile_replaced_20240411_133452.csv")
+
+
+def aggregate_to_market(df, most_common_trim_features):
+    """Aggregates the data to the market level.
+    We assume that with in each make, model, model_year, trim, range_elec, and fuel - the other features are all the same.
+    Consequently we can use the "agg:first" function"""
+
+    most_common_trim_features = most_common_trim_features.drop(columns = ["veh_count"])
+    
+    # Aggregate and check
+    output_counties = df[["make", "model", "model_year", "trim", "fuel", "range_elec", "county_name", "veh_count"]].groupby(["make", "model", "model_year", "trim", "fuel", "range_elec", "county_name"]).sum()
+    output_myear = df[["make", "model", "model_year", "trim", "fuel", "range_elec", "veh_count"]].groupby(["make", "model", "model_year", "trim", "fuel", "range_elec"]).sum()
+    assert(output_counties["veh_count"].sum() == df["veh_count"].sum())
+    assert(output_myear["veh_count"].sum() == df["veh_count"].sum())
+
+    # Merge back in the details
+    output_counties = output_counties.merge(most_common_trim_features, on = ["make", "model", "model_year", "trim", "fuel", "range_elec"], how = 'left')
+    output_myear = output_myear.merge(most_common_trim_features, on = ["make", "model", "model_year", "trim", "fuel", "range_elec"], how = 'left')
+    assert(output_counties["veh_count"].sum() == df["veh_count"].sum())
+    assert(output_myear["veh_count"].sum() == df["veh_count"].sum())
+
+    return output_counties, output_myear
+
+
+aggregated_counties, aggregated_myear = aggregate_to_market(df_replaced, most_common_trim_features)
 
 
