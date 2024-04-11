@@ -66,7 +66,19 @@ vars = list(agg_funs.keys())
 ####################################################################################################
 # Step 1: Identify the most common trim per make and model
 def get_most_common_trim(df, sales_col, separate_electric = True):
-    """Get the most common trim for each make and model."""
+    """Get the most common trim for each (make, model, fuel, range_elec).
+    Note: We get the most common trim across all the model years included. For example, for the 
+    Ford F-150, suppose Trim A was most popular in 2018, but Trim B was most popular in all the years
+    together. In that case, we assign all F-150s to Trim B; even those in 2018.
+
+    Note: This also means that even if Trim B was not available in 2018, we still assign all the 2018
+    observations to Trim B.
+    
+    Note: For electric vehicles, we do not choose a most popular trim - we keep all the trims.
+    """
+
+
+    unique_product_ids = ["make", "model", "trim", "fuel", "range_elec"]
 
     # Extract sales for each make, model, and trim. We group the unique products by the number of sales over
     # the whole period. (unique product = make, model, trim, fuel, range_elec)
@@ -151,11 +163,17 @@ def replace_with_most_common_trim(df, most_common_trim_features, electric = Fals
     # Prepare a column to record successful merges
     most_common_trim_features["merge_success"] = 1
 
+    # Fix range_elec for later - this appears to be causing an issue with Tesla Model X
+    if electric:
+        most_common_trim_features["range_elec"] = round(most_common_trim_features["range_elec"], 2)
+        df["range_elec"] = round(df["range_elec"], 2)
+
     # Get the columns to merge on and to keep
     cols_merge_on = ["make", "model", "model_year", "fuel", "range_elec"]
     cols_merge_on_noyear = ["make", "model", "fuel", "range_elec"]
     cols_to_keep = ["veh_count", "county_name"]
 
+   
     # Alter this if electric
     if electric:
         cols_merge_on = cols_merge_on + ["trim"]
@@ -173,6 +191,8 @@ def replace_with_most_common_trim(df, most_common_trim_features, electric = Fals
     # In these cases, we will have NaNs in the output. We get closest available model year
     output_merged = output.loc[output["merge_success"] == 1]
     output_not_merged = output.loc[output["merge_success"] != 1, cols_merge_on + cols_to_keep]
+    
+    output_not_merged["range_elec"] = round(output_not_merged["range_elec"], 2)
 
     # Get the model year with the highest sales for each make, model, trim, fuel, and range_elec
     most_common_trim_features_top = most_common_trim_features.sort_values("veh_count", ascending=False).drop_duplicates(cols_merge_on_noyear)
@@ -196,20 +216,19 @@ def replace_with_most_common_trim(df, most_common_trim_features, electric = Fals
     return output
 
 # Replace details for electric and non-electric separately
-# df_replaced_nelec = replace_with_most_common_trim(df_rlp.loc[df_rlp["fuel"]!="electric"], most_common_trim_features)
-# df_replaced_elec = replace_with_most_common_trim(df_rlp.loc[df_rlp["fuel"]=="electric"], most_common_trim_features, electric = True)
-# df_replaced = pd.concat([df_replaced_nelec, df_replaced_elec])
+df_replaced_nelec = replace_with_most_common_trim(df_rlp.loc[df_rlp["fuel"]!="electric"], most_common_trim_features)
+df_replaced_elec = replace_with_most_common_trim(df_rlp.loc[df_rlp["fuel"]=="electric"], most_common_trim_features, electric = True)
+df_replaced = pd.concat([df_replaced_nelec, df_replaced_elec])
 
 # Save
 # df_replaced.to_csv(output_folder / f"rlp_with_dollar_per_mile_replaced_{date_time}.csv", index = False)
 
-df_replaced = pd.read_csv(output_folder / "rlp_with_dollar_per_mile_replaced_20240411_133452.csv")
+# df_replaced = pd.read_csv(output_folder / "rlp_with_dollar_per_mile_replaced_20240411_133452.csv")
 
 
 def aggregate_to_market(df, most_common_trim_features):
     """Aggregates the data to the market level.
-    We assume that with in each make, model, model_year, trim, range_elec, and fuel - the other features are all the same.
-    Consequently we can use the "agg:first" function"""
+    We assume that with in each make, model, model_year, trim, range_elec, and fuel - the other features are all the same."""
 
     most_common_trim_features = most_common_trim_features.drop(columns = ["veh_count"])
     
@@ -220,6 +239,7 @@ def aggregate_to_market(df, most_common_trim_features):
     assert(output_myear["veh_count"].sum() == df["veh_count"].sum())
 
     # Merge back in the details
+    # WE GET NAs here
     output_counties = output_counties.merge(most_common_trim_features, on = ["make", "model", "model_year", "trim", "fuel", "range_elec"], how = 'left')
     output_myear = output_myear.merge(most_common_trim_features, on = ["make", "model", "model_year", "trim", "fuel", "range_elec"], how = 'left')
     assert(output_counties["veh_count"].sum() == df["veh_count"].sum())
@@ -229,5 +249,7 @@ def aggregate_to_market(df, most_common_trim_features):
 
 
 aggregated_counties, aggregated_myear = aggregate_to_market(df_replaced, most_common_trim_features)
+aggregated_counties.to_csv(output_folder / f"rlp_with_dollar_per_mile_replaced_myear_county_{date_time}.csv")
+aggregated_myear.to_csv(output_folder / f"rlp_with_dollar_per_mile_replaced_myear_{date_time}.csv")
 
 
