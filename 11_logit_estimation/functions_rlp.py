@@ -238,7 +238,7 @@ def clean_market_data(mkt_data, mkt_ids):
     mkt_data = mkt_data.loc[mkt_data.shares > np.percentile(mkt_data.shares,5)].reset_index(drop = True)
 
     # Create market id for pyblp
-    mkt_data["market_ids"] = mkt_data[mkt_ids]
+    # mkt_data["market_ids"] = mkt_data[mkt_ids]
 
     # Get prices 
     mkt_data['prices'] = mkt_data.msrp

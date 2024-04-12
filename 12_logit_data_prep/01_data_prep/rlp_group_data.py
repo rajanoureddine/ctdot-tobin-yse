@@ -216,40 +216,67 @@ def replace_with_most_common_trim(df, most_common_trim_features, electric = Fals
     return output
 
 # Replace details for electric and non-electric separately
-df_replaced_nelec = replace_with_most_common_trim(df_rlp.loc[df_rlp["fuel"]!="electric"], most_common_trim_features)
-df_replaced_elec = replace_with_most_common_trim(df_rlp.loc[df_rlp["fuel"]=="electric"], most_common_trim_features, electric = True)
-df_replaced = pd.concat([df_replaced_nelec, df_replaced_elec])
+# df_replaced_nelec = replace_with_most_common_trim(df_rlp.loc[df_rlp["fuel"]!="electric"], most_common_trim_features)
+# df_replaced_elec = replace_with_most_common_trim(df_rlp.loc[df_rlp["fuel"]=="electric"], most_common_trim_features, electric = True)
+# df_replaced = pd.concat([df_replaced_nelec, df_replaced_elec])
 
 # Save
 # df_replaced.to_csv(output_folder / f"rlp_with_dollar_per_mile_replaced_{date_time}.csv", index = False)
 
-# df_replaced = pd.read_csv(output_folder / "rlp_with_dollar_per_mile_replaced_20240411_133452.csv")
+df_replaced = pd.read_csv(output_folder / "rlp_with_dollar_per_mile_replaced_20240411_133452.csv")
 
 
 def aggregate_to_market(df, most_common_trim_features):
     """Aggregates the data to the market level.
     We assume that with in each make, model, model_year, trim, range_elec, and fuel - the other features are all the same."""
 
+    df["range_elec"] = round(df["range_elec"], 2)
+    most_common_trim_features["range_elec"] = round(most_common_trim_features["range_elec"], 2)
+
+    most_common_trim_features_orig = most_common_trim_features.copy()
     most_common_trim_features = most_common_trim_features.drop(columns = ["veh_count"])
     
     # Aggregate and check
-    output_counties = df[["make", "model", "model_year", "trim", "fuel", "range_elec", "county_name", "veh_count"]].groupby(["make", "model", "model_year", "trim", "fuel", "range_elec", "county_name"]).sum()
+    output_counties = df[["make", "model", "model_year", "trim", "fuel", "range_elec", "county_name", "veh_count"]].groupby(["make", "model", "model_year", "trim", "fuel", "range_elec", "county_name"]).sum().reset_index()
     output_myear = df[["make", "model", "model_year", "trim", "fuel", "range_elec", "veh_count"]].groupby(["make", "model", "model_year", "trim", "fuel", "range_elec"]).sum()
     assert(output_counties["veh_count"].sum() == df["veh_count"].sum())
     assert(output_myear["veh_count"].sum() == df["veh_count"].sum())
 
-    # Merge back in the details
-    # WE GET NAs here
+    # WE GET NAs here - where the most popular trim is not available in a given model_year
     output_counties = output_counties.merge(most_common_trim_features, on = ["make", "model", "model_year", "trim", "fuel", "range_elec"], how = 'left')
     output_myear = output_myear.merge(most_common_trim_features, on = ["make", "model", "model_year", "trim", "fuel", "range_elec"], how = 'left')
     assert(output_counties["veh_count"].sum() == df["veh_count"].sum())
     assert(output_myear["veh_count"].sum() == df["veh_count"].sum())
 
+    # Split into matched and unmatched
+    output_counties_matched = output_counties[output_counties["msrp"].notna()]
+    output_counties_unmatched = output_counties.loc[output_counties["msrp"].isna(), ["make", "model", "model_year", "trim", "fuel", "range_elec", "county_name", "veh_count"]]
+    output_myear_matched = output_myear[output_myear["msrp"].notna()]
+    output_myear_unmatched = output_myear.loc[output_myear["msrp"].isna(), ["make", "model", "model_year", "trim", "fuel", "range_elec", "veh_count"]]
+
+    # Get the top year
+    most_common_trim_features_top = most_common_trim_features_orig.sort_values("veh_count", ascending=False).drop_duplicates(subset = ["make", "model", "trim", "fuel", "range_elec"])
+    most_common_trim_features_top = most_common_trim_features_top.drop("veh_count", axis = 1)
+    
+    # Match in
+    cols = {"model_year_x": "model_year", "model_year_y": "model_year_matched"}
+    output_counties_unmatched_fixed = output_counties_unmatched.merge(most_common_trim_features_top, on = ["make", "model", "trim", "fuel", "range_elec"], how = 'left').rename(columns =cols)
+    output_myear_unmatched_fixed = output_myear_unmatched.merge(most_common_trim_features_top, on = ["make", "model", "trim", "fuel", "range_elec"], how = 'left').rename(columns =cols)
+
+    assert(len(output_counties_unmatched_fixed)== len(output_counties_unmatched))
+    assert(len(output_myear_unmatched_fixed) == len(output_myear_unmatched))
+
+    output_counties = pd.concat([output_counties_matched, output_counties_unmatched_fixed], ignore_index=True)
+    output_myear = pd.concat([output_myear_matched, output_myear_unmatched_fixed], ignore_index=True)
+
     return output_counties, output_myear
 
 
-aggregated_counties, aggregated_myear = aggregate_to_market(df_replaced, most_common_trim_features)
-aggregated_counties.to_csv(output_folder / f"rlp_with_dollar_per_mile_replaced_myear_county_{date_time}.csv")
-aggregated_myear.to_csv(output_folder / f"rlp_with_dollar_per_mile_replaced_myear_{date_time}.csv")
+# aggregated_counties, aggregated_myear = aggregate_to_market(df_replaced, most_common_trim_features)
+# aggregated_counties.to_csv(output_folder / f"rlp_with_dollar_per_mile_replaced_myear_county_{date_time}.csv")
+# aggregated_myear.to_csv(output_folder / f"rlp_with_dollar_per_mile_replaced_myear_{date_time}.csv")
+
+aggregated_myear = pd.read_csv(output_folder / "rlp_with_dollar_per_mile_replaced_myear_20240411_183046.csv")
+print("hello")
 
 

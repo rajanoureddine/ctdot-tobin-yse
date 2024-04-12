@@ -45,6 +45,7 @@ if platform.platform()[0:5] == 'macOS':
     output_folder = str_project / str_data / "outputs"
     str_mapping = str_rlp / "brand_to_oem_generated.csv"
     estimation_test = str_data / "estimation_data_test"
+    str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_20240411_183046.csv"
 
 ############################################################################################################
 # Set up logging
@@ -92,78 +93,114 @@ exp_trims = exp_mkt_data.trim.unique()
 
 ############################################################################################################
 # We now prepare the RLP data, aiming to make it as similar as possible to the Experian data
-def prepare_rlp_data(product_ids = ['make', 'model', 'trim'], match_model_years = False, match_vehicles = False, drop_uncommon = True):
-    # read in VIN data - file of approx 100000 rows, including car characteristics
-    vin_data = pd.read_csv(str_sales_vin_characteristic)
-    orig_vin_data = vin_data.copy()
+def prepare_rlp_data(df):
+    df["product_ids"] = df.make + "_" + df.model + "_" + df.model_year.astype(str) + "_" + df.trim + "_" + df.fuel + "_" + df.range_elec.astype(str).str[0:3]
+    df["market_ids"] = df["model_year"]
 
-    # Create product_id column
-    vin_data["product_ids"] = vin_data[product_ids].apply(lambda x: '_'.join(x), axis = 1)
+    df = rlp_functions.generate_firm_ids(df, str_mapping)
 
-    # Drop unnecessary columns
-    unneeded_cols = ['vin_pattern', 'fuel_type', 'transaction_price', 'sp_id', 'sp_make', 'sp_model', 'sp_model_year', 'zip_code' , 'vin_orig', 'vehicle_id', 'plant']
-    vin_data = vin_data.drop(columns = unneeded_cols)
+    df = rlp_functions.generate_fuel_type_dummies(df)
 
-    if match_model_years:
-        # Get only the model years that are in the Experian data - also drop 2016
-        vin_data = vin_data[(vin_data.model_year >= exp_min_model_year) & (vin_data.model_year <= exp_max_model_year) & (vin_data.model_year != 2016)]
-
-    # Match the makes and models across datasets
-    if match_vehicles:
-        vin_data = rlp_functions.match_makes_models(vin_data, exp_mkt_data)
-
-    # Different ways to remove uncommon products.
-    # - If using counties, then drop those products that are not in at least 7 counties
-    # - Drop those make, models, and trims that are not in at least 5 model years
-    if drop_uncommon and rlp_market != 'model_year':
-        vin_data = rlp_functions.drop_uncommon_products(vin_data, rlp_market, 7)
-    elif drop_uncommon and rlp_market == 'model_year':
-        vin_data = rlp_functions.normalize_markets(vin_data, rlp_market, num = 5)
-
-    orig_sales = vin_data.veh_count.sum()
-    orig_products = vin_data.product_ids.nunique()
-
-    # Get firm ids
-    vin_data = rlp_functions.generate_firm_ids(vin_data, str_mapping)
-    assert(orig_sales == vin_data.veh_count.sum()), "Sales should not change after dropping uncommon products"
-    assert(orig_products == vin_data.product_ids.nunique()), "Products should not change after dropping uncommon products"
-
-    # Get dummies for electric, phev, hybrid, diesel
-    vin_data = rlp_functions.generate_fuel_type_dummies(vin_data)
-    assert(orig_sales == vin_data.veh_count.sum()), "Sales should not change after generating fuel type dummies"
-    assert(orig_products == vin_data.product_ids.nunique()), "Products should not change after generating fuel type dummies"
-
-    # Aggregate to market level
-    vin_data_aggregated = rlp_functions.aggregate_to_market(vin_data, rlp_market, "product_ids", "veh_count")
-    assert(orig_sales == vin_data_aggregated.veh_count.sum()), "Sales should not change after aggregating to market level"
-    assert(orig_products == vin_data_aggregated.product_ids.nunique()), "Products should not change after aggregating to market level"
 
     # Read in census data - contains total number of households for each county in Connecticut
     census_data = rlp_functions.read_census_data(str_data / "other_data" / "total-households-county-2019.csv")
 
     # Merge the VIN data with the census data
-    mkt_data = rlp_functions.merge_vin_census(vin_data_aggregated, census_data, rlp_market)
-    assert(orig_sales == mkt_data.veh_count.sum()), "Sales should not change after merging with census data"
-    assert(orig_products == mkt_data.product_ids.nunique()), "Products should not change after merging with census data"
+    mkt_data = rlp_functions.merge_vin_census(df, census_data, rlp_market)
 
     # Clean the market data
     mkt_data = rlp_functions.clean_market_data(mkt_data, rlp_market)
-    orig_sales = mkt_data.veh_count.sum()
 
     # Calculate the share of the outside good
     mkt_data = rlp_functions.calc_outside_good(mkt_data, rlp_market)
-    assert(orig_sales == mkt_data.veh_count.sum()), "Sales should not change after calculating the share of the outside good"
+    # assert(orig_sales == mkt_data.veh_count.sum()), "Sales should not change after calculating the share of the outside good"
     # assert(orig_products == mkt_data.vin_pattern.nunique()), "Products should not change after calculating the share of the outside good"
 
     # Add instruments 
     mkt_data = rlp_functions.generate_pyblp_instruments(mkt_data)
-    # assert(orig_sales == mkt_data.veh_count.sum()), "Sales should not change after generating PyBLP instruments"
 
     return mkt_data
 
-rlp_mkt_data = prepare_rlp_data(match_vehicles=True)
+
+df = pd.read_csv(str_rlp_new)
+rlp_mkt_data = prepare_rlp_data(df)
 rlp_mkt_data = rlp_mkt_data.rename(columns = {'log_hp_wt':'log_hp_weight', 'drive_type':'drivetype', 'body_type':'bodytype'})
-rlp_mkt_data.to_csv(estimation_test / f'mkt_data_{rlp_market}.csv',index = False)
+rlp_mkt_data.to_csv(estimation_test / f'mkt_data_{rlp_market}_{date_time}.csv',index = False)
+
+
+if False:
+    def prepare_rlp_data_old(product_ids = ['make', 'model', 'trim'], match_model_years = False, match_vehicles = False, drop_uncommon = True):
+        # read in VIN data - file of approx 100000 rows, including car characteristics
+        vin_data = pd.read_csv(str_sales_vin_characteristic)
+        orig_vin_data = vin_data.copy()
+
+        # Create product_id column
+        vin_data["product_ids"] = vin_data[product_ids].apply(lambda x: '_'.join(x), axis = 1)
+
+        # Drop unnecessary columns
+        unneeded_cols = ['vin_pattern', 'fuel_type', 'transaction_price', 'sp_id', 'sp_make', 'sp_model', 'sp_model_year', 'zip_code' , 'vin_orig', 'vehicle_id', 'plant']
+        vin_data = vin_data.drop(columns = unneeded_cols)
+
+        if match_model_years:
+            # Get only the model years that are in the Experian data - also drop 2016
+            vin_data = vin_data[(vin_data.model_year >= exp_min_model_year) & (vin_data.model_year <= exp_max_model_year) & (vin_data.model_year != 2016)]
+
+        # Match the makes and models across datasets
+        if match_vehicles:
+            vin_data = rlp_functions.match_makes_models(vin_data, exp_mkt_data)
+
+        # Different ways to remove uncommon products.
+        # - If using counties, then drop those products that are not in at least 7 counties
+        # - Drop those make, models, and trims that are not in at least 5 model years
+        if drop_uncommon and rlp_market != 'model_year':
+            vin_data = rlp_functions.drop_uncommon_products(vin_data, rlp_market, 7)
+        elif drop_uncommon and rlp_market == 'model_year':
+            vin_data = rlp_functions.normalize_markets(vin_data, rlp_market, num = 5)
+
+        orig_sales = vin_data.veh_count.sum()
+        orig_products = vin_data.product_ids.nunique()
+
+        # Get firm ids
+        vin_data = rlp_functions.generate_firm_ids(vin_data, str_mapping)
+        assert(orig_sales == vin_data.veh_count.sum()), "Sales should not change after dropping uncommon products"
+        assert(orig_products == vin_data.product_ids.nunique()), "Products should not change after dropping uncommon products"
+
+        # Get dummies for electric, phev, hybrid, diesel
+        vin_data = rlp_functions.generate_fuel_type_dummies(vin_data)
+        assert(orig_sales == vin_data.veh_count.sum()), "Sales should not change after generating fuel type dummies"
+        assert(orig_products == vin_data.product_ids.nunique()), "Products should not change after generating fuel type dummies"
+
+        # Aggregate to market level
+        vin_data_aggregated = rlp_functions.aggregate_to_market(vin_data, rlp_market, "product_ids", "veh_count")
+        assert(orig_sales == vin_data_aggregated.veh_count.sum()), "Sales should not change after aggregating to market level"
+        assert(orig_products == vin_data_aggregated.product_ids.nunique()), "Products should not change after aggregating to market level"
+
+        # Read in census data - contains total number of households for each county in Connecticut
+        census_data = rlp_functions.read_census_data(str_data / "other_data" / "total-households-county-2019.csv")
+
+        # Merge the VIN data with the census data
+        mkt_data = rlp_functions.merge_vin_census(vin_data_aggregated, census_data, rlp_market)
+        assert(orig_sales == mkt_data.veh_count.sum()), "Sales should not change after merging with census data"
+        assert(orig_products == mkt_data.product_ids.nunique()), "Products should not change after merging with census data"
+
+        # Clean the market data
+        mkt_data = rlp_functions.clean_market_data(mkt_data, rlp_market)
+        orig_sales = mkt_data.veh_count.sum()
+
+        # Calculate the share of the outside good
+        mkt_data = rlp_functions.calc_outside_good(mkt_data, rlp_market)
+        assert(orig_sales == mkt_data.veh_count.sum()), "Sales should not change after calculating the share of the outside good"
+        # assert(orig_products == mkt_data.vin_pattern.nunique()), "Products should not change after calculating the share of the outside good"
+
+        # Add instruments 
+        mkt_data = rlp_functions.generate_pyblp_instruments(mkt_data)
+        # assert(orig_sales == mkt_data.veh_count.sum()), "Sales should not change after generating PyBLP instruments"
+
+        return mkt_data
+
+    rlp_mkt_data = prepare_rlp_data_old(match_vehicles=True)
+    rlp_mkt_data = rlp_mkt_data.rename(columns = {'log_hp_wt':'log_hp_weight', 'drive_type':'drivetype', 'body_type':'bodytype'})
+    rlp_mkt_data.to_csv(estimation_test / f'mkt_data_{rlp_market}.csv',index = False)
 
 ############################################################################################################
 
@@ -233,5 +270,5 @@ if model == 'logit':
         output_logit = pd.concat([output_logit, output_specification_logit], axis = 0)
         output_ols = pd.concat([output_ols, output_specification_ols], axis = 0)
 
-output_logit.to_csv(output_folder / f'comparison_outputs_logit_{rlp_market}.csv',index = False)
-output_ols.to_csv(output_folder / f'comparison_outputs_ols_{rlp_market}.csv',index = False)
+output_logit.to_csv(output_folder / f'comparison_outputs_logit_{rlp_market}_{date_time}.csv',index = False)
+output_ols.to_csv(output_folder / f'comparison_outputs_ols_{rlp_market}_{date_time}.csv',index = False)
