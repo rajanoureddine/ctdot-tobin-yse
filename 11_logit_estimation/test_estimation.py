@@ -39,6 +39,9 @@ warnings.filterwarnings("ignore")
 
 
 ####################################################################################################
+# Get date time in string
+date_time = pd.Timestamp.now().strftime("%Y%m%d_%H%M")
+
 # Set directories
 if True:
     str_cwd = pathlib.Path().resolve().parent.parent
@@ -46,13 +49,13 @@ if True:
     str_rlp_data = str_dir / "rlpolk_data"
     rlp_data_file = "rlp_with_dollar_per_mile.csv"
     estimation_data = str_dir / "estimation_data_test" / "mkt_data_county.csv"
-    estimation_data_myear = str_dir / "estimation_data_test" / "mkt_data_model_year.csv"
+    estimation_data_myear = str_dir / "estimation_data_test" / "mkt_data_model_year_0412-1517.csv"
     exp_estimation_data = str_dir / "estimation_data_test" / "exp_mkt_data.csv"
     experian_data = str_dir / "intermediate" / "US_VIN_data_common.csv"
     str_outputs = str_dir / "estimation_data_test"
 
     # Save the vehicle characteristic comparison here
-    veh_char_comp_str = str_outputs / "raw_data_vehicle_chars_comparison.csv"
+    veh_char_comp_str = str_outputs / f"raw_data_vehicle_chars_comparison{date_time}.csv"
 
     # Import the raw and aggregateed data
     df_rlp = pd.read_csv(str_rlp_data / rlp_data_file)
@@ -113,7 +116,7 @@ def test_veh_chars_raw(setup_rlp_data, setup_rlp_estimation_data, setup_exp_esti
     df_experian = df_experian.rename(columns = {"curbwt": "curb_weight", "year": "model_year"})
 
     # Note variables to compare
-    vars_to_compare = ["make", "model","model_year", "trim", "fuel", "msrp", "doors", "curb_weight", "max_hp", "dollar_per_mile", "log_hp_weight", "wheelbase", "range_elec"]
+    vars_to_compare = ["make", "model","model_year", "trim", "fuel", "msrp", "doors", "curb_weight", "dollar_per_mile", "log_hp_weight", "wheelbase", "range_elec"]
 
     # Get unique make, model, model_year combinations, and for each calculate a mean dollars_per_mile
     unique_vehs = df_rlp[vars_to_compare].drop_duplicates()
@@ -146,7 +149,7 @@ def test_veh_chars_raw(setup_rlp_data, setup_rlp_estimation_data, setup_exp_esti
         
     # Compare the data and save to CSV
     joined = get_comparisons(unique_vehs, df_experian, vars_to_compare)
-    joined.to_csv(str_outputs / "estimation_data_vehicle_comparison.csv", index = False)
+    joined.to_csv(str_outputs / f"estimation_data_vehicle_comparison{date_time}.csv", index = False)
 
 
 def test_veh_chars_comparison(setup_comparison_data, setup_rlp_data, setup_experian_data):

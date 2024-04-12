@@ -241,7 +241,7 @@ def clean_market_data(mkt_data, mkt_ids):
     # mkt_data["market_ids"] = mkt_data[mkt_ids]
 
     # Get prices 
-    mkt_data['prices'] = mkt_data.msrp
+    mkt_data['prices'] = mkt_data.msrp - mkt_data.fed_credit
 
     # mkt_data['time_trend'] = mkt_data.model_year - 2013
 
@@ -261,9 +261,6 @@ def clean_market_data(mkt_data, mkt_ids):
     # add clustering id so standard errors can be clustered at product level
     mkt_data['clustering_ids'] = mkt_data.product_ids
 
-    # set prices = price - subsidy
-    # Dropped fed credit as it is not available for all vehicles
-    mkt_data.prices = mkt_data.msrp - mkt_data.fed_credit
 
     return mkt_data
 
@@ -325,7 +322,8 @@ def generate_fuel_type_dummies(vin_data):
 
 def generate_pyblp_instruments(mkt_data):
     # generate instruments at national level!
-    instrument_data = mkt_data[['product_ids', 'market_ids', 'firm_ids', 'doors', 'model_year','log_hp_wt','wheelbase','curb_weight','drive_type','body_type']].drop_duplicates().reset_index(drop=True)
+    instrument_data = mkt_data[['product_ids','firm_ids', 'doors', 'model_year','log_hp_wt','wheelbase','curb_weight','drive_type','body_type']].drop_duplicates().reset_index(drop=True)
+    instrument_data['market_ids'] =  instrument_data.model_year
 
     # improved instruments
     # separate differentiation instruments (continuous chars) AND discrete instrument (for each product, count own- and rival- products with same values)
