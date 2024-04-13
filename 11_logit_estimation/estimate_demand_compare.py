@@ -111,7 +111,6 @@ def prepare_rlp_data(df):
 
 ############################################################################################################
 exp_mkt_data = prepare_experian_data()
-
 df = pd.read_csv(str_rlp_new)
 df_in = df.loc[(df["model_year"]!=2016) & (df["model_year"]!=2023)]
 rlp_mkt_data = prepare_rlp_data(df_in)
@@ -139,17 +138,39 @@ exp_mkt_data = exp_mkt_data[exp_mkt_data["make"]!="Lotus"]
 exp_mkt_data = exp_mkt_data[exp_mkt_data["make"]!="Scion"]
 
 # Drop make Genesis from both
-exp_mkt_data = exp_mkt_data[exp_mkt_data["make"]!="Genesis"]
-rlp_mkt_data = rlp_mkt_data[rlp_mkt_data["make"]!="Genesis"]
+# exp_mkt_data = exp_mkt_data[exp_mkt_data["make"]!="Genesis"]
+# rlp_mkt_data = rlp_mkt_data[rlp_mkt_data["make"]!="Genesis"]
 
 # Drop Maserati from both
 exp_mkt_data = exp_mkt_data[exp_mkt_data["make"]!="Maserati"]
 rlp_mkt_data = rlp_mkt_data[rlp_mkt_data["make"]!="Maserati"]
 
+# Drop the market year 2014 and 2015 from the experian data
+exp_mkt_data = exp_mkt_data[exp_mkt_data["model_year"]!=2014]
+exp_mkt_data = exp_mkt_data[exp_mkt_data["model_year"]!=2015]
 
 # Save
 exp_mkt_data.to_csv(estimation_test / f'exp_mkt_data_{date_time}.csv',index = False)
 rlp_mkt_data.to_csv(estimation_test / f'mkt_data_{rlp_market}_{date_time}.csv',index = False)
+
+
+################################################################################
+# Get only those make, model, model_year combinations that are in both datasets
+exp_mkt_data["key"] = exp_mkt_data["make"] + "_" + exp_mkt_data["model"] + "_" + exp_mkt_data["model_year"].astype(str) + "_" + exp_mkt_data["trim"]
+rlp_mkt_data["key"] = rlp_mkt_data["make"] + "_" + rlp_mkt_data["model"] + "_" + rlp_mkt_data["model_year"].astype(str) + "_" + rlp_mkt_data["trim"]
+
+rlp_mkt_data_short = rlp_mkt_data[rlp_mkt_data["key"].isin(exp_mkt_data["key"])].reset_index(drop=True)
+exp_mkt_data_short = exp_mkt_data[exp_mkt_data["key"].isin(rlp_mkt_data["key"])].reset_index(drop=True)
+
+rlp_mkt_data_short["log_hp_weight"] = rlp_mkt_data_short[["key"]].merge(exp_mkt_data_short[["key","log_hp_weight"]], on = "key", how = "left")["log_hp_weight"]
+
+rlp_mkt_data = rlp_mkt_data_short.copy()
+exp_mkt_data = exp_mkt_data_short.copy()
+
+# Save
+exp_mkt_data.to_csv(estimation_test / f'exp_mkt_data_{date_time}.csv',index = False)
+rlp_mkt_data.to_csv(estimation_test / f'mkt_data_{rlp_market}_{date_time}.csv',index = False)
+
 
 
 

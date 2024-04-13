@@ -29,10 +29,15 @@ output_folder = str_rlp
 
 # Set the date and time and output filename
 date_time = datetime.now().strftime("%Y%m%d_%H%M%S")
-output_file = str_rlp / f"rlp_prepared_{date_time}.csv"
+lease = "no_lease"
+output_file = str_rlp / f"rlp_prepared_{date_time}_{lease}.csv"
 
 # Read in the RLP data to be processed
 df_rlp = pd.read_csv(str_sales_vin_characteristic)
+if lease == "no_lease":
+    num_leases = df_rlp["transaction_price"].isna().sum()
+    print(f"Number of leases to be dropped: {num_leases}")
+    df_rlp = df_rlp.loc[df_rlp["transaction_price"].notna()]
 
 ####################################################################################################
 unique_product_ids = ["make", "model", "trim", "fuel", "range_elec"]
@@ -107,7 +112,7 @@ def get_most_common_trim(df, sales_col, separate_electric = True):
 
     return most_common_trim
 
-# most_common_trims = get_most_common_trim(df_rlp, sales_col)
+most_common_trims = get_most_common_trim(df_rlp, sales_col)
 
 # Step 2: Calculate the features for each of these products.
 # To do this, we take all instances of that product (for a given model year) and average the features.
@@ -142,10 +147,10 @@ def get_most_common_trim_features(df, most_common_trims):
     
     return output
 
-# most_common_trim_features = get_most_common_trim_features(df_rlp, most_common_trims)
-# most_common_trim_features.to_csv(output_folder / f"most_common_trim_features_{date_time}.csv", index=False)
+most_common_trim_features = get_most_common_trim_features(df_rlp, most_common_trims)
+most_common_trim_features.to_csv(output_folder / f"most_common_trim_features_{date_time}_{lease}.csv", index=False)
 
-most_common_trim_features = pd.read_csv(output_folder / "most_common_trim_features_20240411_123942.csv")
+# most_common_trim_features = pd.read_csv(output_folder / "most_common_trim_features_20240411_123942.csv")
 
 # Quick test that within each make, model, model_year, trim, fuel, and range_elec the features are all the same. 
 test = most_common_trim_features.drop_duplicates(subset=["make", "model", "model_year", "trim", "fuel", "range_elec"])
@@ -216,14 +221,14 @@ def replace_with_most_common_trim(df, most_common_trim_features, electric = Fals
     return output
 
 # Replace details for electric and non-electric separately
-# df_replaced_nelec = replace_with_most_common_trim(df_rlp.loc[df_rlp["fuel"]!="electric"], most_common_trim_features)
-# df_replaced_elec = replace_with_most_common_trim(df_rlp.loc[df_rlp["fuel"]=="electric"], most_common_trim_features, electric = True)
-# df_replaced = pd.concat([df_replaced_nelec, df_replaced_elec])
+df_replaced_nelec = replace_with_most_common_trim(df_rlp.loc[df_rlp["fuel"]!="electric"], most_common_trim_features)
+df_replaced_elec = replace_with_most_common_trim(df_rlp.loc[df_rlp["fuel"]=="electric"], most_common_trim_features, electric = True)
+df_replaced = pd.concat([df_replaced_nelec, df_replaced_elec])
 
 # Save
-# df_replaced.to_csv(output_folder / f"rlp_with_dollar_per_mile_replaced_{date_time}.csv", index = False)
+df_replaced.to_csv(output_folder / f"rlp_with_dollar_per_mile_replaced_{date_time}_{lease}.csv", index = False)
 
-df_replaced = pd.read_csv(output_folder / "rlp_with_dollar_per_mile_replaced_20240411_133452.csv")
+# df_replaced = pd.read_csv(output_folder / "rlp_with_dollar_per_mile_replaced_20240411_133452.csv")
 
 
 def aggregate_to_market(df, most_common_trim_features):
@@ -272,11 +277,11 @@ def aggregate_to_market(df, most_common_trim_features):
     return output_counties, output_myear
 
 
-# aggregated_counties, aggregated_myear = aggregate_to_market(df_replaced, most_common_trim_features)
-# aggregated_counties.to_csv(output_folder / f"rlp_with_dollar_per_mile_replaced_myear_county_{date_time}.csv")
-# aggregated_myear.to_csv(output_folder / f"rlp_with_dollar_per_mile_replaced_myear_{date_time}.csv")
+aggregated_counties, aggregated_myear = aggregate_to_market(df_replaced, most_common_trim_features)
+aggregated_counties.to_csv(output_folder / f"rlp_with_dollar_per_mile_replaced_myear_county_{date_time}_{lease}.csv")
+aggregated_myear.to_csv(output_folder / f"rlp_with_dollar_per_mile_replaced_myear_{date_time}_{lease}.csv")
 
-aggregated_myear = pd.read_csv(output_folder / "rlp_with_dollar_per_mile_replaced_myear_20240411_183046.csv")
-print("hello")
+# aggregated_myear = pd.read_csv(output_folder / "rlp_with_dollar_per_mile_replaced_myear_20240411_183046.csv")
+# print("hello")
 
 
