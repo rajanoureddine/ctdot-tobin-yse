@@ -170,34 +170,21 @@ def normalize_markets(df, mkt_ids, num = 3):
 
 
 
-def merge_vin_census(vin_data,census_data, mkt_ids = "county_name"):
+def merge_vin_census(vin_data,census_data, mkt_ids = "model_year"):
     """
     Merge the VIN data with the census data.
     """
-    # Merge the VIN data with the census data
-    if mkt_ids == "county_name":
-        print("Merging the VIN data with the census data - we merge on county only")
-
-        # Get rid of aggregate figure
-        census_data = census_data.loc[~census_data["county"].str.contains("CONNECTICUT"), :]
-
-        df = vin_data.merge(census_data, left_on = "county_name", right_on = "county", how = "left")
-        assert(len(df) == len(vin_data)), "Merge did not match the correct number of rows"
-        assert(df.veh_count.sum() == vin_data.veh_count.sum()), "Merge affected the number of sales"
-        assert(df["tot_HH"].isnull().sum() == 0), "Merge did not match all rows"
-
-        # Drop the extra column from the census data
-        df = df.drop(columns = ["county"])
-        
-        return df
+    if mkt_ids == "model_year":
+        output = vin_data.merge(census_data, left_on = "model_year", right_on = "model_year", how = "left")
+    if mkt_ids == "model_year_county":
+        output = vin_data.merge(census_data, left_on = ["model_year", "county_name"], right_on = ["model_year", "county_name"], how = "left")
     
-    else:
-        total_ct_pop = census_data.loc[census_data["county"].str.contains("CONNECTICUT"), : "tot_HH"].values[0][1]
-        print(f"Total number of households in Connecticut: {total_ct_pop}")
-        df = vin_data.copy()
-        df["tot_HH"] = total_ct_pop
+    # Check the merge worked correctly
+    assert(len(output) == len(vin_data)), "Merge did not match the correct number of rows"
+    assert(output.veh_count.sum() == vin_data.veh_count.sum()), "Merge affected the number of sales"
+    assert(output["tot_HH"].isnull().sum() == 0), "Merge did not match all rows"
 
-        return df
+    return output
 
 
 def clean_market_data(mkt_data, mkt_ids):
