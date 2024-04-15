@@ -13,24 +13,28 @@ pd.set_option('display.max_columns', None)
 str_cwd = pathlib.Path().resolve().parent.parent
 str_dir = str_cwd / "Documents" / "tobin_working_data"
 str_data = str_dir / "other_data" / "census_households"
+str_output = str_dir / "other_data"
 
 output = pd.DataFrame()
 
 for file in str_data.iterdir():
     name = file.name
-    year = name[7:11]
-    df = pd.read_excel(file, sheet_name = "Data").T
-    df = df.reset_index()
-    df.columns = df.iloc[0]
-    df = df.rename(columns = {"Unnamed: 0": "County"})
-    df = df.loc[df["Label"]=="Estimate"]
-    df = df.loc[:, ["County", "Total:"]]
-    df["Year"] = year
-    df["Total:"] = df["Total:"].str.replace(",", "").astype(int)
-    output = pd.concat([output, df])
+    if not name == ".DS_Store":
+        year = name[7:11]
+        df = pd.read_excel(file, sheet_name = "Data").T
+        df = df.reset_index()
+        df.columns = df.iloc[0]
+        df = df.rename(columns = {"Unnamed: 0": "County"})
+        df = df.loc[df["Label"]=="Estimate"]
+        df = df.loc[:, ["County", "Total:"]]
+        df["Year"] = year
+        df["Total:"] = df["Total:"].str.replace(",", "").astype(int)
+        output = pd.concat([output, df])
 
-print(output.head(30))
+# Create and save years data
+years = output.groupby("Year")["Total:"].sum().reset_index().rename(columns = {"Total:": "tot_HH", "Year":"model_year"})
+years.to_csv(str_output / "hhs_by_year.csv", index = False)
 
-for year in output["Year"].unique():
-    print(year)
-    print(output.loc[output["Year"]==year, "Total:"].sum())
+# Create and save years counties data
+years_counties = output.rename(columns = {"Total:": "tot_HH", "Year":"model_year", "County":"county_name"})
+years_counties.to_csv(str_output / "hhs_by_year_counties.csv", index = False)

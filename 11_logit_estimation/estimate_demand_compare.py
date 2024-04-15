@@ -33,6 +33,7 @@ integ = 'halton'
 dynamic = False
 incl_2021 = True
 rlp_market = 'model_year'
+# rlp_market = ='county_model_year'
 
 ############################################################################################################
 # Set up directories
@@ -45,7 +46,8 @@ if platform.platform()[0:5] == 'macOS':
     output_folder = str_project / str_data / "outputs"
     str_mapping = str_rlp / "brand_to_oem_generated.csv"
     estimation_test = str_data / "estimation_data_test"
-    str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_20240411_183046.csv"
+    str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_20240413_064557_no_lease.csv" # NO LEASES
+    # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_20240411_183046.csv"
 
 ############################################################################################################
 # Set up logging
@@ -81,19 +83,23 @@ def prepare_experian_data():
 
 ############################################################################################################
 # We now prepare the RLP data, aiming to make it as similar as possible to the Experian data
-def prepare_rlp_data(df):
+def prepare_rlp_data(df, mkt_def = "model_year"):
     df["product_ids"] = df.make + "_" + df.model + "_" + df.model_year.astype(str) + "_" + df.trim + "_" + df.fuel + "_" + df.range_elec.astype(str).str[0:3]
-    df["market_ids"] = df["model_year"]
-
-    # Drop model years 2016 and 2023
-    df = df.loc[(df["model_year"]!=2016) & (df["model_year"]!=2023)]
+    
+    if mkt_def == "model_year":
+        df["market_ids"] = df["model_year"]
+    elif mkt_def == "county_model_year":
+        df["market_ids"] = df["county_name"] + "_" + df["model_year"].astype(str)
 
     # Generate firm IDs and fueltype dummies
     df = rlp_functions.generate_firm_ids(df, str_mapping)
     df = rlp_functions.generate_fuel_type_dummies(df)
 
     # Read in census data - contains total number of households for each county in Connecticut
-    census_data = rlp_functions.read_census_data(str_data / "other_data" / "total-households-county-2019.csv")
+    if mkt_def == "model_year":
+        census_data = pd.read_csv(str_data / "other_data" / "hhs_by_year.csv")
+    elif mkt_def == "county_model_year":
+        census_data = pd.read_csv(str_data / "other_data" / "hhs_by_year_counties.csv")
 
     # Merge the VIN data with the census data
     mkt_data = rlp_functions.merge_vin_census(df, census_data, rlp_market)
@@ -146,8 +152,8 @@ exp_mkt_data = exp_mkt_data[exp_mkt_data["make"]!="Maserati"]
 rlp_mkt_data = rlp_mkt_data[rlp_mkt_data["make"]!="Maserati"]
 
 # Drop the market year 2014 and 2015 from the experian data
-exp_mkt_data = exp_mkt_data[exp_mkt_data["model_year"]!=2014]
-exp_mkt_data = exp_mkt_data[exp_mkt_data["model_year"]!=2015]
+# exp_mkt_data = exp_mkt_data[exp_mkt_data["model_year"]!=2014]
+# exp_mkt_data = exp_mkt_data[exp_mkt_data["model_year"]!=2015]
 
 # Save
 exp_mkt_data.to_csv(estimation_test / f'exp_mkt_data_{date_time}.csv',index = False)
@@ -156,20 +162,21 @@ rlp_mkt_data.to_csv(estimation_test / f'mkt_data_{rlp_market}_{date_time}.csv',i
 
 ################################################################################
 # Get only those make, model, model_year combinations that are in both datasets
-exp_mkt_data["key"] = exp_mkt_data["make"] + "_" + exp_mkt_data["model"] + "_" + exp_mkt_data["model_year"].astype(str) + "_" + exp_mkt_data["trim"]
-rlp_mkt_data["key"] = rlp_mkt_data["make"] + "_" + rlp_mkt_data["model"] + "_" + rlp_mkt_data["model_year"].astype(str) + "_" + rlp_mkt_data["trim"]
+if False:
+    exp_mkt_data["key"] = exp_mkt_data["make"] + "_" + exp_mkt_data["model"] + "_" + exp_mkt_data["model_year"].astype(str) + "_" + exp_mkt_data["trim"]
+    rlp_mkt_data["key"] = rlp_mkt_data["make"] + "_" + rlp_mkt_data["model"] + "_" + rlp_mkt_data["model_year"].astype(str) + "_" + rlp_mkt_data["trim"]
 
-rlp_mkt_data_short = rlp_mkt_data[rlp_mkt_data["key"].isin(exp_mkt_data["key"])].reset_index(drop=True)
-exp_mkt_data_short = exp_mkt_data[exp_mkt_data["key"].isin(rlp_mkt_data["key"])].reset_index(drop=True)
+    rlp_mkt_data_short = rlp_mkt_data[rlp_mkt_data["key"].isin(exp_mkt_data["key"])].reset_index(drop=True)
+    exp_mkt_data_short = exp_mkt_data[exp_mkt_data["key"].isin(rlp_mkt_data["key"])].reset_index(drop=True)
 
-rlp_mkt_data_short["log_hp_weight"] = rlp_mkt_data_short[["key"]].merge(exp_mkt_data_short[["key","log_hp_weight"]], on = "key", how = "left")["log_hp_weight"]
+    rlp_mkt_data_short["log_hp_weight"] = rlp_mkt_data_short[["key"]].merge(exp_mkt_data_short[["key","log_hp_weight"]], on = "key", how = "left")["log_hp_weight"]
 
-rlp_mkt_data = rlp_mkt_data_short.copy()
-exp_mkt_data = exp_mkt_data_short.copy()
+    rlp_mkt_data = rlp_mkt_data_short.copy()
+    exp_mkt_data = exp_mkt_data_short.copy()
 
-# Save
-exp_mkt_data.to_csv(estimation_test / f'exp_mkt_data_{date_time}.csv',index = False)
-rlp_mkt_data.to_csv(estimation_test / f'mkt_data_{rlp_market}_{date_time}.csv',index = False)
+    # Save
+    exp_mkt_data.to_csv(estimation_test / f'exp_mkt_data_{date_time}.csv',index = False)
+    rlp_mkt_data.to_csv(estimation_test / f'mkt_data_{rlp_market}_{date_time}.csv',index = False)
 
 
 
@@ -183,10 +190,10 @@ rlp_mkt_data_keep = rlp_mkt_data.copy()
 output_logit = pd.DataFrame()
 output_ols = pd.DataFrame()
 
-# params_master = ['prices', 'dollar_per_mile', 'electric', 'phev', 'hybrid', 'diesel', 'log_hp_weight', 'wheelbase', 'doors', 'range_elec', 'make', 'drivetype', 'bodytype']
-params_master = ['prices', 'electric', 'phev', 'hybrid', 'diesel', 'log_hp_weight', 'wheelbase', 'doors', 'range_elec', 'make', 'drivetype', 'bodytype']
-# specifications = [1, 2, 6, 7, 8, 9, 10]
-specifications = [1, 5, 6, 7, 8, 9]
+params_master = ['prices', 'dollar_per_mile', 'electric', 'phev', 'hybrid', 'diesel', 'log_hp_weight', 'wheelbase', 'doors', 'range_elec', 'make', 'drivetype', 'bodytype']
+# params_master = ['prices', 'electric', 'phev', 'hybrid', 'diesel', 'log_hp_weight', 'wheelbase', 'doors', 'range_elec', 'make', 'drivetype', 'bodytype']
+specifications = [1, 2, 6, 7, 8, 9, 10]
+# specifications = [1, 5, 6, 7, 8, 9]
 
 if model == 'logit':
     for j in specifications:

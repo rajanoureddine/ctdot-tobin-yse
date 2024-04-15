@@ -167,17 +167,22 @@ def normalize_markets(df, mkt_ids, num = 3):
 
 
 
-
-
-
 def merge_vin_census(vin_data,census_data, mkt_ids = "model_year"):
     """
     Merge the VIN data with the census data.
     """
+    # Set fake model year for 2023
+    vin_data["fmy"] = vin_data["model_year"]
+    vin_data.loc[vin_data["model_year"]==2023, "fmy"] = 2022
+
     if mkt_ids == "model_year":
-        output = vin_data.merge(census_data, left_on = "model_year", right_on = "model_year", how = "left")
+        output = vin_data.merge(census_data, left_on = "fmy", right_on = "model_year", how = "left")
     if mkt_ids == "model_year_county":
-        output = vin_data.merge(census_data, left_on = ["model_year", "county_name"], right_on = ["model_year", "county_name"], how = "left")
+        output = vin_data.merge(census_data, left_on = ["fmy", "county_name"], right_on = ["model_year", "county_name"], how = "left")
+
+    # Clean up
+    output = output.drop(columns = ["fmy", "model_year_y"])
+    output = output.rename(columns = {"model_year_x": "model_year"})
     
     # Check the merge worked correctly
     assert(len(output) == len(vin_data)), "Merge did not match the correct number of rows"
