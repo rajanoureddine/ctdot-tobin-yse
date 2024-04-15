@@ -166,7 +166,6 @@ def normalize_markets(df, mkt_ids, num = 3):
 
 
 
-
 def merge_vin_census(vin_data,census_data, mkt_ids = "model_year"):
     """
     Merge the VIN data with the census data.
@@ -175,9 +174,14 @@ def merge_vin_census(vin_data,census_data, mkt_ids = "model_year"):
     vin_data["fmy"] = vin_data["model_year"]
     vin_data.loc[vin_data["model_year"]==2023, "fmy"] = 2022
 
+    # For the counties, 2022 additionally cannot be matched so we use 2021
+    if mkt_ids == "county_model_year":
+        vin_data.loc[vin_data["model_year"]==2022, "fmy"] = 2021
+        vin_data.loc[vin_data["model_year"]==2023, "fmy"] = 2021
+
     if mkt_ids == "model_year":
         output = vin_data.merge(census_data, left_on = "fmy", right_on = "model_year", how = "left")
-    if mkt_ids == "model_year_county":
+    if mkt_ids == "county_model_year":
         output = vin_data.merge(census_data, left_on = ["fmy", "county_name"], right_on = ["model_year", "county_name"], how = "left")
 
     # Clean up
@@ -256,10 +260,10 @@ def clean_market_data(mkt_data, mkt_ids):
 
     return mkt_data
 
-def calc_outside_good(mkt_data, mkt_ids):
-    outside_good = mkt_data[[mkt_ids,'shares']].groupby([mkt_ids]).sum().reset_index()
+def calc_outside_good(mkt_data):
+    outside_good = mkt_data[["market_ids",'shares']].groupby(["market_ids"]).sum().reset_index()
     outside_good['outside_share'] = 1 - outside_good.shares
-    mkt_data = pd.merge(mkt_data,outside_good[[mkt_ids,'outside_share']],how='left',on=[mkt_ids])
+    mkt_data = pd.merge(mkt_data,outside_good[["market_ids",'outside_share']],how='left',on="market_ids")
 
     return mkt_data
 
@@ -314,8 +318,8 @@ def generate_fuel_type_dummies(vin_data):
 
 def generate_pyblp_instruments(mkt_data):
     # generate instruments at national level!
-    instrument_data = mkt_data[['product_ids','firm_ids', 'doors', 'model_year','log_hp_wt','wheelbase','curb_weight','drive_type','body_type']].drop_duplicates().reset_index(drop=True)
-    instrument_data['market_ids'] =  instrument_data.model_year
+    instrument_data = mkt_data[['product_ids','firm_ids', 'doors', 'model_year','log_hp_wt','wheelbase','curb_weight','drive_type','body_type', "market_ids"]].drop_duplicates().reset_index(drop=True)
+    # instrument_data['market_ids'] =  instrument_data.model_year
 
     # improved instruments
     # separate differentiation instruments (continuous chars) AND discrete instrument (for each product, count own- and rival- products with same values)

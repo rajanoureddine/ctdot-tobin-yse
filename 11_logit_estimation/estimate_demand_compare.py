@@ -32,8 +32,8 @@ model = 'logit'
 integ = 'halton'
 dynamic = False
 incl_2021 = True
-rlp_market = 'model_year'
-# rlp_market = ='county_model_year'
+# rlp_market = 'model_year'
+rlp_market ='model_year'
 
 ############################################################################################################
 # Set up directories
@@ -46,7 +46,8 @@ if platform.platform()[0:5] == 'macOS':
     output_folder = str_project / str_data / "outputs"
     str_mapping = str_rlp / "brand_to_oem_generated.csv"
     estimation_test = str_data / "estimation_data_test"
-    str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_20240413_064557_no_lease.csv" # NO LEASES
+    # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_20240413_064557_no_lease.csv" # NO LEASES
+    str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_20240415_170934_no_lease_zms.csv" # NO LEASES + COUNTY + ZMS
     # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_20240411_183046.csv"
 
 ############################################################################################################
@@ -108,7 +109,7 @@ def prepare_rlp_data(df, mkt_def = "model_year"):
     mkt_data = rlp_functions.clean_market_data(mkt_data, rlp_market)
 
     # Calculate the share of the outside good
-    mkt_data = rlp_functions.calc_outside_good(mkt_data, rlp_market)
+    mkt_data = rlp_functions.calc_outside_good(mkt_data)
 
     # Add instruments 
     mkt_data = rlp_functions.generate_pyblp_instruments(mkt_data)
@@ -119,7 +120,7 @@ def prepare_rlp_data(df, mkt_def = "model_year"):
 exp_mkt_data = prepare_experian_data()
 df = pd.read_csv(str_rlp_new)
 df_in = df.loc[(df["model_year"]!=2016) & (df["model_year"]!=2023)]
-rlp_mkt_data = prepare_rlp_data(df_in)
+rlp_mkt_data = prepare_rlp_data(df_in, mkt_def = rlp_market)
 rlp_mkt_data = rlp_mkt_data.rename(columns = {'log_hp_wt':'log_hp_weight', 'drive_type':'drivetype', 'body_type':'bodytype'})
 
 

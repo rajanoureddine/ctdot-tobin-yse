@@ -27,6 +27,7 @@ for file in str_data.iterdir():
         df = df.rename(columns = {"Unnamed: 0": "County"})
         df = df.loc[df["Label"]=="Estimate"]
         df = df.loc[:, ["County", "Total:"]]
+        df["County"] = df["County"].str.replace(" County, Connecticut", "").str.upper()
         df["Year"] = year
         df["Total:"] = df["Total:"].str.replace(",", "").astype(int)
         output = pd.concat([output, df])
