@@ -120,6 +120,7 @@ def prepare_rlp_data(df, mkt_def = "model_year"):
 exp_mkt_data = prepare_experian_data()
 df = pd.read_csv(str_rlp_new)
 df_in = df.loc[(df["model_year"]!=2016) & (df["model_year"]!=2023)]
+df_in.loc[df_in["veh_count"]==0, "veh_count"] = 0.01
 rlp_mkt_data = prepare_rlp_data(df_in, mkt_def = rlp_market)
 rlp_mkt_data = rlp_mkt_data.rename(columns = {'log_hp_wt':'log_hp_weight', 'drive_type':'drivetype', 'body_type':'bodytype'})
 

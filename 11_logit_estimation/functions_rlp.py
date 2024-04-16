@@ -231,7 +231,7 @@ def clean_market_data(mkt_data, mkt_ids):
     mkt_data['shares'] = mkt_data['veh_count']/mkt_data.tot_HH
 
     # drop observations with market share below the 5th percentile
-    mkt_data = mkt_data.loc[mkt_data.shares > np.percentile(mkt_data.shares,5)].reset_index(drop = True)
+    # mkt_data = mkt_data.loc[mkt_data.shares > np.percentile(mkt_data.shares,5)].reset_index(drop = True)
 
     # Create market id for pyblp
     # mkt_data["market_ids"] = mkt_data[mkt_ids]
