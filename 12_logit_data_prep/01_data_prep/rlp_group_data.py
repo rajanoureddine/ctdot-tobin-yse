@@ -29,7 +29,7 @@ output_folder = str_rlp
 
 # Set the date and time and output filename
 date_time = datetime.now().strftime("%Y%m%d_%H%M%S")
-lease = "no_lease"
+lease = "inc_leases"
 output_file = str_rlp / f"rlp_prepared_{date_time}_{lease}.csv"
 
 # Read in the RLP data to be processed
@@ -112,7 +112,7 @@ def get_most_common_trim(df, sales_col, separate_electric = True):
 
     return most_common_trim
 
-# most_common_trims = get_most_common_trim(df_rlp, sales_col)
+most_common_trims = get_most_common_trim(df_rlp, sales_col)
 
 # Step 2: Calculate the features for each of these products.
 # To do this, we take all instances of that product (for a given model year) and average the features.
@@ -228,7 +228,8 @@ def replace_with_most_common_trim(df, most_common_trim_features, electric = Fals
 # Save
 # df_replaced.to_csv(output_folder / f"rlp_with_dollar_per_mile_replaced_{date_time}_{lease}.csv", index = False)
 
-# df_replaced = pd.read_csv(output_folder / "rlp_with_dollar_per_mile_replaced_20240411_133452.csv")
+# Read in WITH leases
+df_replaced = pd.read_csv(output_folder / "rlp_with_dollar_per_mile_replaced_20240411_133452.csv")
 
 def aggregate_to_market(df, most_common_trim_features):
     """Aggregates the data to the market level.
@@ -275,14 +276,16 @@ def aggregate_to_market(df, most_common_trim_features):
 
     return output_counties, output_myear
 
+aggregated_counties, aggregated_myear = aggregate_to_market(df_replaced, most_common_trim_features)
+aggregated_counties.to_csv(output_folder / f"rlp_with_dollar_per_mile_replaced_myear_county_{date_time}_{lease}.csv")
+aggregated_myear.to_csv(output_folder / f"rlp_with_dollar_per_mile_replaced_myear_{date_time}_{lease}.csv")
 
-# aggregated_counties, aggregated_myear = aggregate_to_market(df_replaced, most_common_trim_features)
-# aggregated_counties.to_csv(output_folder / f"rlp_with_dollar_per_mile_replaced_myear_county_{date_time}_{lease}.csv")
-# aggregated_myear.to_csv(output_folder / f"rlp_with_dollar_per_mile_replaced_myear_{date_time}_{lease}.csv")
-
-
-aggregated_myear = pd.read_csv(output_folder / "rlp_with_dollar_per_mile_replaced_myear_20240413_064557_no_lease.csv")
-aggregated_counties = pd.read_csv(output_folder / "rlp_with_dollar_per_mile_replaced_myear_county_20240413_064557_no_lease.csv")
+# Read in with NO LEASE
+# aggregated_myear = pd.read_csv(output_folder / "rlp_with_dollar_per_mile_replaced_myear_20240413_064557_no_lease.csv")
+# aggregated_counties = pd.read_csv(output_folder / "rlp_with_dollar_per_mile_replaced_myear_county_20240413_064557_no_lease.csv")
+# Read in with LEASE
+# aggregated_myear = pd.read_csv(output_folder / "rlp_with_dollar_per_mile_replaced_myear_20240411_183046.csv")
+# aggregated_counties = pd.read_csv(output_folder / "rlp_with_dollar_per_mile_replaced_myear_county_20240411_183046.csv")
 
 def rationalize_markets(df_my, df_my_ct, threshold, most_common_trim_features):
     """
@@ -330,8 +333,8 @@ def rationalize_markets(df_my, df_my_ct, threshold, most_common_trim_features):
     assert(len(df_my_ct_out) == len(df_my_ct))
     assert(df_my_ct_out["veh_count"].sum() == df_my_ct["veh_count"].sum())
 
-    df_my_ct_out = df_my_ct_out.drop(columns = ["Unnamed: 0", "merge_success"])
-    df_my_out = df_my_out.drop(columns = ["Unnamed: 0", "merge_success"])
+    # df_my_ct_out = df_my_ct_out.drop(columns = ["merge_success"])
+    # df_my_out = df_my_out.drop(columns = ["merge_success"])
 
     return df_my_out, df_my_ct_out
 

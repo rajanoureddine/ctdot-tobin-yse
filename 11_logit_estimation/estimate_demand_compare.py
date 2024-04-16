@@ -34,6 +34,7 @@ dynamic = False
 incl_2021 = True
 # rlp_market = 'model_year'
 rlp_market ='county_model_year'
+date_time = time.strftime("%m%d-%H%M")
 
 ############################################################################################################
 # Set up directories
@@ -48,14 +49,41 @@ if platform.platform()[0:5] == 'macOS':
     estimation_test = str_data / "estimation_data_test"
     # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_20240413_064557_no_lease.csv" # NO LEASES
     str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240415_170934_no_lease_zms.csv" # NO LEASES + COUNTY + ZMS
+    # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240416_141637_inc_leases_zms.csv" # LEASES + COUNTY + ZMS
     # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_20240411_183046.csv"
+
+# Create subfolder for the outputs
+output_subfolder = output_folder / f'comparison_outputs_{rlp_market}_{date_time}'
+os.mkdir(output_subfolder)
+
+# Create subfolder for the data
+estimation_data_subfolder = estimation_test / f'comparison_data_{rlp_market}_{date_time}'
+os.mkdir(estimation_data_subfolder)
 
 ############################################################################################################
 # Set up logging
 import logging
-date_time = time.strftime("%m%d-%H%M")
-logging.basicConfig(filename= output_folder / f'estimate_demand_compare_{date_time}.log', level=logging.INFO, format='%(asctime)s - %(message)s')
+logging.basicConfig(filename= output_subfolder / f'estimate_demand_compare_{date_time}.log', level=logging.INFO, format='%(asctime)s - %(message)s')
 
+def my_handler(type, value, tb):
+    logging.exception("Uncaught exception: {0}".format(str(value)))
+
+sys.excepthook = my_handler
+
+description = f"""
+Input: {str_rlp_new}
+Output: {output_subfolder}
+Estimation Data: {estimation_data_subfolder}
+We try to replicate the comparison_outputs_logit_county_model_year_0416-1336.csv outputs.
+We drop Tesla, Polestar, Smart, Lotus, Scion, Genesis, Maserati from both datasets.
+We drop 2016, 2017, 2023 from the RLP data.
+This time we change the 0 market shares to 0.001.
+"""
+
+if not description:
+    raise ValueError("Please provide a description of the estimation")
+
+logging.info(description + "\n----------------------------------------------------------")
 ############################################################################################################
 # We prepare the Experian data for estimation
 def prepare_experian_data():
@@ -119,8 +147,9 @@ def prepare_rlp_data(df, mkt_def = "model_year"):
 ############################################################################################################
 exp_mkt_data = prepare_experian_data()
 df = pd.read_csv(str_rlp_new)
-df_in = df
-df_in.loc[df_in["veh_count"]==0, "veh_count"] = 0.01
+df_in = df.copy()
+df_in = df.loc[~((df["model_year"]==2016) | (df["model_year"]==2017) | (df["model_year"]==2023))].reset_index(drop=True)
+df_in.loc[df_in["veh_count"]==0, "veh_count"] = 0.001
 rlp_mkt_data = prepare_rlp_data(df_in, mkt_def = rlp_market)
 rlp_mkt_data = rlp_mkt_data.rename(columns = {'log_hp_wt':'log_hp_weight', 'drive_type':'drivetype', 'body_type':'bodytype'})
 
@@ -153,31 +182,6 @@ exp_mkt_data = exp_mkt_data[exp_mkt_data["make"]!="Scion"]
 exp_mkt_data = exp_mkt_data[exp_mkt_data["make"]!="Maserati"]
 rlp_mkt_data = rlp_mkt_data[rlp_mkt_data["make"]!="Maserati"]
 
-# Drop the market year 2014 and 2015 from the experian data
-# exp_mkt_data = exp_mkt_data[exp_mkt_data["model_year"]!=2014]
-# exp_mkt_data = exp_mkt_data[exp_mkt_data["model_year"]!=2015]
-
-
-################################################################################
-# Get only those make, model, model_year combinations that are in both datasets
-if False:
-    exp_mkt_data["key"] = exp_mkt_data["make"] + "_" + exp_mkt_data["model"] + "_" + exp_mkt_data["model_year"].astype(str) + "_" + exp_mkt_data["trim"]
-    rlp_mkt_data["key"] = rlp_mkt_data["make"] + "_" + rlp_mkt_data["model"] + "_" + rlp_mkt_data["model_year"].astype(str) + "_" + rlp_mkt_data["trim"]
-
-    rlp_mkt_data_short = rlp_mkt_data[rlp_mkt_data["key"].isin(exp_mkt_data["key"])].reset_index(drop=True)
-    exp_mkt_data_short = exp_mkt_data[exp_mkt_data["key"].isin(rlp_mkt_data["key"])].reset_index(drop=True)
-
-    rlp_mkt_data_short["log_hp_weight"] = rlp_mkt_data_short[["key"]].merge(exp_mkt_data_short[["key","log_hp_weight"]], on = "key", how = "left")["log_hp_weight"]
-
-    rlp_mkt_data = rlp_mkt_data_short.copy()
-    exp_mkt_data = exp_mkt_data_short.copy()
-
-    # Save
-    exp_mkt_data.to_csv(estimation_test / f'exp_mkt_data_{date_time}.csv',index = False)
-    rlp_mkt_data.to_csv(estimation_test / f'mkt_data_{rlp_market}_{date_time}.csv',index = False)
-
-
-
 
 ####################
 # run PyBLP models #
@@ -186,15 +190,7 @@ exp_mkt_data_keep = exp_mkt_data.copy()
 rlp_mkt_data_keep = rlp_mkt_data.copy()
 
 
-# Create subfolder for the outputs
-output_subfolder = output_folder / f'comparison_outputs_{rlp_market}_{date_time}'
-os.mkdir(output_subfolder)
-
-# Create subfolder for the data
-estimation_data_subfolder = estimation_test / f'comparison_data_{rlp_market}_{date_time}'
-os.mkdir(estimation_data_subfolder)
-
-def run_logit_model(exp_df, rlp_df, subfolder, estimation_data_folder, myear = None):
+def run_logit_model(exp_df, rlp_df, subfolder, estimation_data_folder, myear = "all"):
     # Set up the output dataframes
     output_logit = pd.DataFrame()
     output_ols = pd.DataFrame()
@@ -205,7 +201,7 @@ def run_logit_model(exp_df, rlp_df, subfolder, estimation_data_folder, myear = N
     # specifications = [1, 5, 6, 7, 8, 9]
 
 
-    if myear:
+    if isinstance(myear, int):
         rlp_df = rlp_df[rlp_df["model_year"]==myear]
 
     # Save the market data
@@ -274,11 +270,16 @@ def run_logit_model(exp_df, rlp_df, subfolder, estimation_data_folder, myear = N
 
     output_logit.to_csv(subfolder / f'comparison_outputs_logit_{rlp_market}_{date_time}_{myear}.csv',index = False)
     output_ols.to_csv(subfolder / f'comparison_outputs_ols_{rlp_market}_{date_time}_{myear}.csv',index = False)
-    
-for myear in sorted(rlp_mkt_data["model_year"].unique()):
-    print("Running model year: ", myear)
-    try:
-        run_logit_model(exp_mkt_data, rlp_mkt_data, output_subfolder, estimation_data_subfolder, myear)
-    except:
-        print("Error running model year: ", myear)
-        logging.info(f"Error running model year: {myear}")
+
+
+run_logit_model(exp_mkt_data, rlp_mkt_data, output_subfolder, estimation_data_subfolder, myear = "all_years")
+
+
+if False:
+    for myear in sorted(rlp_mkt_data["model_year"].unique()):
+        print("Running model year: ", myear)
+        try:
+            run_logit_model(exp_mkt_data, rlp_mkt_data, output_subfolder, estimation_data_subfolder, myear)
+        except:
+            print("Error running model year: ", myear)
+            logging.info(f"Error running model year: {myear}")

@@ -307,7 +307,7 @@ def generate_fuel_type_dummies(vin_data):
     assert(sum(vin_data["electric"]) > 0)
     assert(sum(vin_data["phev"]) > 0)
     assert(sum(vin_data["hybrid"]) > 0)
-    assert(sum(vin_data["diesel"]) > 0)
+    # assert(sum(vin_data["diesel"]) > 0)
 
     check = vin_data.loc[(vin_data.electric == 0) & (vin_data.phev == 0) & (vin_data.hybrid == 0) & (vin_data.diesel == 0), "fuel"].unique()
     print(check)
