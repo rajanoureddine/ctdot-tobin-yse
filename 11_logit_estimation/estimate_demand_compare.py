@@ -119,7 +119,7 @@ def prepare_rlp_data(df, mkt_def = "model_year"):
 ############################################################################################################
 exp_mkt_data = prepare_experian_data()
 df = pd.read_csv(str_rlp_new)
-df_in = df.loc[(df["model_year"]!=2016) &  (df["model_year"]!=2017) & (df["model_year"]!=2023)]
+df_in = df
 df_in.loc[df_in["veh_count"]==0, "veh_count"] = 0.01
 rlp_mkt_data = prepare_rlp_data(df_in, mkt_def = rlp_market)
 rlp_mkt_data = rlp_mkt_data.rename(columns = {'log_hp_wt':'log_hp_weight', 'drive_type':'drivetype', 'body_type':'bodytype'})
@@ -157,10 +157,6 @@ rlp_mkt_data = rlp_mkt_data[rlp_mkt_data["make"]!="Maserati"]
 # exp_mkt_data = exp_mkt_data[exp_mkt_data["model_year"]!=2014]
 # exp_mkt_data = exp_mkt_data[exp_mkt_data["model_year"]!=2015]
 
-# Save
-exp_mkt_data.to_csv(estimation_test / f'exp_mkt_data_{date_time}.csv',index = False)
-rlp_mkt_data.to_csv(estimation_test / f'mkt_data_{rlp_market}_{date_time}.csv',index = False)
-
 
 ################################################################################
 # Get only those make, model, model_year combinations that are in both datasets
@@ -189,19 +185,37 @@ if False:
 exp_mkt_data_keep = exp_mkt_data.copy()
 rlp_mkt_data_keep = rlp_mkt_data.copy()
 
-output_logit = pd.DataFrame()
-output_ols = pd.DataFrame()
 
-params_master = ['prices', 'dollar_per_mile', 'electric', 'phev', 'hybrid', 'diesel', 'log_hp_weight', 'wheelbase', 'doors', 'range_elec', 'make', 'drivetype', 'bodytype']
-# params_master = ['prices', 'electric', 'phev', 'hybrid', 'diesel', 'log_hp_weight', 'wheelbase', 'doors', 'range_elec', 'make', 'drivetype', 'bodytype']
-specifications = [1, 2, 6, 7, 8, 9, 10]
-# specifications = [1, 5, 6, 7, 8, 9]
+# Create subfolder for the outputs
+output_subfolder = output_folder / f'comparison_outputs_{rlp_market}_{date_time}'
+os.mkdir(output_subfolder)
 
-if model == 'logit':
+# Create subfolder for the data
+estimation_data_subfolder = estimation_test / f'comparison_data_{rlp_market}_{date_time}'
+os.mkdir(estimation_data_subfolder)
+
+def run_logit_model(exp_df, rlp_df, subfolder, estimation_data_folder, myear = None):
+    # Set up the output dataframes
+    output_logit = pd.DataFrame()
+    output_ols = pd.DataFrame()
+
+    params_master = ['prices', 'dollar_per_mile', 'electric', 'phev', 'hybrid', 'diesel', 'log_hp_weight', 'wheelbase', 'doors', 'range_elec', 'make', 'drivetype', 'bodytype']
+    # params_master = ['prices', 'electric', 'phev', 'hybrid', 'diesel', 'log_hp_weight', 'wheelbase', 'doors', 'range_elec', 'make', 'drivetype', 'bodytype']
+    specifications = [1, 2, 6, 7, 8, 9, 10]
+    # specifications = [1, 5, 6, 7, 8, 9]
+
+
+    if myear:
+        rlp_df = rlp_df[rlp_df["model_year"]==myear]
+
+    # Save the market data
+    exp_df.to_csv(estimation_data_folder / f'exp_mkt_data_{date_time}.csv',index = False)
+    rlp_df.to_csv(estimation_data_folder / f'mkt_data_{rlp_market}_{date_time}_{myear}.csv',index = False)
+
     for j in specifications:
         output_specification_logit = pd.DataFrame()
         output_specification_ols = pd.DataFrame()
-        for i, mkt_data in enumerate([exp_mkt_data, rlp_mkt_data]):
+        for i, mkt_data in enumerate([exp_df, rlp_df]):
             if i == 0:
                 data_source = "Experian"
                 print(f"Running {data_source} data")
@@ -258,5 +272,13 @@ if model == 'logit':
         output_logit = pd.concat([output_logit, output_specification_logit], axis = 0)
         output_ols = pd.concat([output_ols, output_specification_ols], axis = 0)
 
-output_logit.to_csv(output_folder / f'comparison_outputs_logit_{rlp_market}_{date_time}.csv',index = False)
-output_ols.to_csv(output_folder / f'comparison_outputs_ols_{rlp_market}_{date_time}.csv',index = False)
+    output_logit.to_csv(subfolder / f'comparison_outputs_logit_{rlp_market}_{date_time}_{myear}.csv',index = False)
+    output_ols.to_csv(subfolder / f'comparison_outputs_ols_{rlp_market}_{date_time}_{myear}.csv',index = False)
+    
+for myear in sorted(rlp_mkt_data["model_year"].unique()):
+    print("Running model year: ", myear)
+    try:
+        run_logit_model(exp_mkt_data, rlp_mkt_data, output_subfolder, estimation_data_subfolder, myear)
+    except:
+        print("Error running model year: ", myear)
+        logging.info(f"Error running model year: {myear}")
