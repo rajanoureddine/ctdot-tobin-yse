@@ -33,7 +33,7 @@ integ = 'halton'
 dynamic = False
 incl_2021 = True
 # rlp_market = 'model_year'
-rlp_market ='model_year'
+rlp_market ='county_model_year'
 
 ############################################################################################################
 # Set up directories
@@ -47,7 +47,7 @@ if platform.platform()[0:5] == 'macOS':
     str_mapping = str_rlp / "brand_to_oem_generated.csv"
     estimation_test = str_data / "estimation_data_test"
     # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_20240413_064557_no_lease.csv" # NO LEASES
-    str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_20240415_170934_no_lease_zms.csv" # NO LEASES + COUNTY + ZMS
+    str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240415_170934_no_lease_zms.csv" # NO LEASES + COUNTY + ZMS
     # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_20240411_183046.csv"
 
 ############################################################################################################
@@ -210,8 +210,12 @@ if model == 'logit':
             
 
             # Prepare the Logit specification
-            params_logit = params_master[0:j] + [f'C({param})' for param in params_master[-3:]]
-            params_ols = params_master[0:j] + [param for param in params_master[-3:]]
+            if data_source == "RLP" and rlp_market == "county_model_year":
+                params_logit = params_master[0:j] + [f'C({param})' for param in params_master[-3:]]+['C(county_name)']
+                params_ols = params_master[0:j] + [param for param in params_master[-3:]]+['county_name']
+            else:
+                params_logit = params_master[0:j] + [f'C({param})' for param in params_master[-3:]]
+                params_ols = params_master[0:j] + [param for param in params_master[-3:]]
             params_str = ' + '.join(params_logit)
             params_str = '0 + ' + params_str
             logit_formulation = pyblp.Formulation(params_str)
@@ -226,7 +230,10 @@ if model == 'logit':
 
             # Prepare the OLS specification and Convert make, drivetype, and bodytype to dummies
             X = mkt_data[params_ols]
-            X = pd.get_dummies(X, columns = ['make', 'drivetype', 'bodytype'], drop_first = True)
+            if data_source == "RLP" and rlp_market == "county_model_year":
+                X = pd.get_dummies(X, columns = ['make', 'drivetype', 'bodytype', 'county_name'], drop_first = True)
+            else:
+                X = pd.get_dummies(X, columns = ['make', 'drivetype', 'bodytype'], drop_first = True)
             Y = mkt_data['shares']
             X = sm.add_constant(X)
             ols_results = sm.OLS(Y.astype(float), X.astype(float)).fit()
