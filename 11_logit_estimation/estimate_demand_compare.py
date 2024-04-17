@@ -35,6 +35,7 @@ incl_2021 = True
 # rlp_market = 'model_year'
 rlp_market ='county_model_year'
 date_time = time.strftime("%m%d-%H%M")
+zms_replaced_with = 0.01
 
 ############################################################################################################
 # Set up directories
@@ -70,25 +71,40 @@ def my_handler(type, value, tb):
 
 sys.excepthook = my_handler
 
-description = f"""
+description_template = f"""
+Parameters:
+-----------------------------------------------------------------------------------
 Input: {str_rlp_new}
 Output: {output_subfolder}
 Estimation Data: {estimation_data_subfolder}
-We try to replicate the comparison_outputs_logit_county_model_year_0416-1336.csv outputs.
-We drop Tesla, Polestar, Smart, Lotus, Scion, Genesis, Maserati from both datasets.
-We drop 2016, 2017, 2023 from the RLP data.
-This time we change the 0 market shares to 0.001.
+Replace ZMS with: {zms_replaced_with}
+-----------------------------------------------------------------------------------
+We have updated the code to incorporate removing makes and model years within the functions.
+We test to ensure we get the same results as comparison_outputs_logit_county_model_year_0416-1336.csv.
 """
+
+description = description_template
 
 if not description:
     raise ValueError("Please provide a description of the estimation")
 
-logging.info(description + "\n----------------------------------------------------------")
+logging.info("\n"+ description + "\n----------------------------------------------------------")
+############################################################################################################
+# Helper functions
+def remove_makes(df, makes):
+    for make in makes:
+        df = df[df["make"]!=make]
+    return df
+
 ############################################################################################################
 # We prepare the Experian data for estimation
-def prepare_experian_data():
+def prepare_experian_data(makes_to_remove = None):
     # read in VIN data - file of approx 100000 rows, including car characteristics
     exp_vin_data = exp_functions.read_vin_data(str_project,str_data,version,dynamic)
+
+    # remove makes
+    if makes_to_remove:
+        exp_vin_data = remove_makes(exp_vin_data, makes_to_remove)
 
     # read in census data
     exp_census_data = exp_functions.read_census_data(str_project,str_data,version)
@@ -112,9 +128,23 @@ def prepare_experian_data():
 
 ############################################################################################################
 # We now prepare the RLP data, aiming to make it as similar as possible to the Experian data
-def prepare_rlp_data(df, mkt_def = "model_year"):
+def prepare_rlp_data(df, makes_to_remove = None, mkt_def = "model_year", year_to_drop = None, zms_replaced_with = 0.001):
+    # Drop relevant market years
+    df = df.loc[~((df["model_year"]==2016) | (df["model_year"]==2017) | (df["model_year"]==2023))].reset_index(drop=True)
+    if year_to_drop:
+        df = df.loc[df["model_year"]!=year_to_drop].reset_index(drop=True)
+
+    # Remove makes
+    if makes_to_remove:
+        df = remove_makes(df, makes_to_remove)
+
+    # Replace ZMS with a small number
+    df.loc[df["veh_count"]==0, "veh_count"] = zms_replaced_with
+
+    # Set the product IDs
     df["product_ids"] = df.make + "_" + df.model + "_" + df.model_year.astype(str) + "_" + df.trim + "_" + df.fuel + "_" + df.range_elec.astype(str).str[0:3]
     
+    # Set the market IDs
     if mkt_def == "model_year":
         df["market_ids"] = df["model_year"]
     elif mkt_def == "county_model_year":
@@ -142,45 +172,44 @@ def prepare_rlp_data(df, mkt_def = "model_year"):
     # Add instruments 
     mkt_data = rlp_functions.generate_pyblp_instruments(mkt_data)
 
+    # Rename columns
+    mkt_data = mkt_data.rename(columns = {'log_hp_wt':'log_hp_weight', 'drive_type':'drivetype', 'body_type':'bodytype'})
+
     return mkt_data
 
 ############################################################################################################
-exp_mkt_data = prepare_experian_data()
-df = pd.read_csv(str_rlp_new)
-df_in = df.copy()
-df_in = df.loc[~((df["model_year"]==2016) | (df["model_year"]==2017) | (df["model_year"]==2023))].reset_index(drop=True)
-df_in.loc[df_in["veh_count"]==0, "veh_count"] = 0.001
-rlp_mkt_data = prepare_rlp_data(df_in, mkt_def = rlp_market)
-rlp_mkt_data = rlp_mkt_data.rename(columns = {'log_hp_wt':'log_hp_weight', 'drive_type':'drivetype', 'body_type':'bodytype'})
+rlp_df = pd.read_csv(str_rlp_new)
+exp_mkt_data = prepare_experian_data(makes_to_remove=["Polestar", "Smart", "Lotus", "Scion", "Maserati"])
+
+rlp_mkt_data = prepare_rlp_data(rlp_df, 
+                                makes_to_remove = ["Polestar", "Smart", "Lotus", "Scion", "Maserati"],
+                                mkt_def = rlp_market, zms_replaced_with = zms_replaced_with)
+
 
 
 ############################################################################################################
-# Final eds
-# rlp_mkt_data = rlp_mkt_data[rlp_mkt_data["make"]!="Tesla"]
-# exp_mkt_data = exp_mkt_data[exp_mkt_data["make"]!="Tesla"]
+if False:
+    rlp_mkt_data = rlp_mkt_data[rlp_mkt_data["make"]!="Polestar"]
+    exp_mkt_data = exp_mkt_data[exp_mkt_data["make"]!="Polestar"]
 
-# Remove make Polestar from both
-rlp_mkt_data = rlp_mkt_data[rlp_mkt_data["make"]!="Polestar"]
-exp_mkt_data = exp_mkt_data[exp_mkt_data["make"]!="Polestar"]
+    # Remove Smart from both
+    rlp_mkt_data = rlp_mkt_data[rlp_mkt_data["make"]!="Smart"]
+    exp_mkt_data = exp_mkt_data[exp_mkt_data["make"]!="Smart"]
 
-# Remove Smart from both
-rlp_mkt_data = rlp_mkt_data[rlp_mkt_data["make"]!="Smart"]
-exp_mkt_data = exp_mkt_data[exp_mkt_data["make"]!="Smart"]
+    # Drop Lotus from both
+    rlp_mkt_data = rlp_mkt_data[rlp_mkt_data["make"]!="Lotus"]
+    exp_mkt_data = exp_mkt_data[exp_mkt_data["make"]!="Lotus"]
 
-# Drop Lotus from both
-rlp_mkt_data = rlp_mkt_data[rlp_mkt_data["make"]!="Lotus"]
-exp_mkt_data = exp_mkt_data[exp_mkt_data["make"]!="Lotus"]
+    # Drop scion from experian
+    exp_mkt_data = exp_mkt_data[exp_mkt_data["make"]!="Scion"]
 
-# Drop scion from experian
-exp_mkt_data = exp_mkt_data[exp_mkt_data["make"]!="Scion"]
+    # Drop make Genesis from both
+    # exp_mkt_data = exp_mkt_data[exp_mkt_data["make"]!="Genesis"]
+    # rlp_mkt_data = rlp_mkt_data[rlp_mkt_data["make"]!="Genesis"]
 
-# Drop make Genesis from both
-# exp_mkt_data = exp_mkt_data[exp_mkt_data["make"]!="Genesis"]
-# rlp_mkt_data = rlp_mkt_data[rlp_mkt_data["make"]!="Genesis"]
-
-# Drop Maserati from both
-exp_mkt_data = exp_mkt_data[exp_mkt_data["make"]!="Maserati"]
-rlp_mkt_data = rlp_mkt_data[rlp_mkt_data["make"]!="Maserati"]
+    # Drop Maserati from both
+    exp_mkt_data = exp_mkt_data[exp_mkt_data["make"]!="Maserati"]
+    rlp_mkt_data = rlp_mkt_data[rlp_mkt_data["make"]!="Maserati"]
 
 
 ####################
