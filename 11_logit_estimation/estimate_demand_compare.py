@@ -80,10 +80,17 @@ Estimation Data: {estimation_data_subfolder}
 Replace ZMS with: {zms_replaced_with}
 -----------------------------------------------------------------------------------
 We have updated the code to incorporate removing makes and model years within the functions.
+<<<<<<< HEAD
 Overall goal is to get the same results as comparison_outputs_logit_county_model_year_0416-1336.csv.
 
 We perform a robustness check by estimating the model, dropping one model year at a time (2018-2022)
 Note that we drop 2016, 2017, and 2023 in the data preparation stage - for ALL estimations. 
+=======
+We test to ensure we get the same results as comparison_outputs_logit_county_model_year_0416-1336.csv.
+
+NOTE: this differs from comparison_outputs_county_model_year_0417-0826 only in that we drop the makes
+at the end of the function, as opposed to at the beginning. That should bring us closer to the original version. 
+>>>>>>> c93c98bb0b97179a0a9d8093360d80d664196b86
 """
 
 description = description_template
@@ -105,10 +112,6 @@ def prepare_experian_data(makes_to_remove = None):
     # read in VIN data - file of approx 100000 rows, including car characteristics
     exp_vin_data = exp_functions.read_vin_data(str_project,str_data,version,dynamic)
 
-    # remove makes
-    if makes_to_remove:
-        exp_vin_data = remove_makes(exp_vin_data, makes_to_remove)
-
     # read in census data
     exp_census_data = exp_functions.read_census_data(str_project,str_data,version)
 
@@ -127,6 +130,10 @@ def prepare_experian_data(makes_to_remove = None):
     # generate PyBLP instruments
     exp_mkt_data = exp_functions.generate_pyblp_instruments(exp_mkt_data)
 
+    # remove makes
+    if makes_to_remove:
+        exp_mkt_data = remove_makes(exp_mkt_data, makes_to_remove)
+
     return exp_mkt_data
 
 ############################################################################################################
@@ -136,10 +143,6 @@ def prepare_rlp_data(df, makes_to_remove = None, mkt_def = "model_year", year_to
     df = df.loc[~((df["model_year"]==2016) | (df["model_year"]==2017) | (df["model_year"]==2023))].reset_index(drop=True)
     if year_to_drop:
         df = df.loc[df["model_year"]!=year_to_drop].reset_index(drop=True)
-
-    # Remove makes
-    if makes_to_remove:
-        df = remove_makes(df, makes_to_remove)
 
     # Replace ZMS with a small number
     df.loc[df["veh_count"]==0, "veh_count"] = zms_replaced_with
@@ -177,6 +180,10 @@ def prepare_rlp_data(df, makes_to_remove = None, mkt_def = "model_year", year_to
 
     # Rename columns
     mkt_data = mkt_data.rename(columns = {'log_hp_wt':'log_hp_weight', 'drive_type':'drivetype', 'body_type':'bodytype'})
+
+    # Remove makes
+    if makes_to_remove:
+        mkt_data = remove_makes(mkt_data, makes_to_remove)
 
     return mkt_data
 
