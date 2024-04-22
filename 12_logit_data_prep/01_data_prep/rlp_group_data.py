@@ -67,6 +67,28 @@ agg_funs = {'model_year':'first',
 vars = list(agg_funs.keys())
 
 
+####################################################################################################
+# Step 0: Decide what we will run here, and what we will read in directly.
+# 0a: Most common trims
+most_common_trim_features = "read_in"
+most_common_trims_destination = output_folder / f"most_common_trim_features_{date_time}_{lease}.csv"
+most_common_trims_source = output_folder / "most_common_trim_features_20240411_123942.csv"
+
+# 0b: Replace with most common trim
+do_replace_with_trim = "read_in"
+replaced_destination = output_folder / f"rlp_with_dollar_per_mile_replaced_{date_time}_{lease}.csv"
+replaced_source  = output_folder / "rlp_with_dollar_per_mile_replaced_20240422_123713_no_lease.csv"
+
+# 0d: Aggregate to market
+do_aggregate_to_market = "read_in"
+
+aggregated_zips_destination = output_folder / f"rlp_with_dollar_per_mile_replaced_myear_zip_{date_time}_{lease}.csv"
+aggregated_counties_destination = output_folder / f"rlp_with_dollar_per_mile_replaced_myear_county_{date_time}_{lease}.csv"
+aggregated_myear_destination = output_folder / f"rlp_with_dollar_per_mile_replaced_myear_{date_time}_{lease}.csv"
+
+aggregated_zips_source = "rlp_with_dollar_per_mile_replaced_myear_zip_20240422_125027_no_lease.csv"
+aggregated_counties_source = "rlp_with_dollar_per_mile_replaced_myear_county_20240422_125027_no_lease.csv"
+aggregated_myear_source = "rlp_with_dollar_per_mile_replaced_myear_20240422_125027_no_lease.csv"
 
 ####################################################################################################
 # Step 1: Identify the most common trim per make and model
@@ -146,10 +168,11 @@ def get_most_common_trim_features(df, most_common_trims):
     return output
 
 ###### Create & Save
-# most_common_trim_features = get_most_common_trim_features(df_rlp, most_common_trims)
-# most_common_trim_features.to_csv(output_folder / f"most_common_trim_features_{date_time}_{lease}.csv", index=False)
-###### Read in
-most_common_trim_features = pd.read_csv(output_folder / "most_common_trim_features_20240411_123942.csv")
+if most_common_trim_features != "read_in":
+    most_common_trim_features = get_most_common_trim_features(df_rlp, most_common_trims)
+    most_common_trim_features.to_csv(most_common_trims_destination, index=False)
+elif most_common_trim_features == "read_in":
+    most_common_trim_features = pd.read_csv(most_common_trims_source)
 
 ####################################################################################################
 # Step 3: In the original data frame, go through each make, model, fuel, and range_elec and replace with the most common trim
@@ -216,21 +239,18 @@ def replace_with_most_common_trim(df, most_common_trim_features, electric = Fals
 
     return output
 
-# Replace details for electric and non-electric separately
-df_replaced_nelec = replace_with_most_common_trim(df_rlp.loc[df_rlp["fuel"]!="electric"], most_common_trim_features)
-df_replaced_elec = replace_with_most_common_trim(df_rlp.loc[df_rlp["fuel"]=="electric"], most_common_trim_features, electric = True)
-df_replaced = pd.concat([df_replaced_nelec, df_replaced_elec])
+####### Create or read
+if do_replace_with_trim != "read_in":
+    df_replaced_nelec = replace_with_most_common_trim(df_rlp.loc[df_rlp["fuel"]!="electric"], most_common_trim_features)
+    df_replaced_elec = replace_with_most_common_trim(df_rlp.loc[df_rlp["fuel"]=="electric"], most_common_trim_features, electric = True)
+    df_replaced = pd.concat([df_replaced_nelec, df_replaced_elec])
+    df_replaced.to_csv(replaced_destination, index = False)
+elif do_replace_with_trim == "read_in":
+    df_replaced = pd.read_csv(replaced_source) # with leases
 
-# Save
-df_replaced.to_csv(output_folder / f"rlp_with_dollar_per_mile_replaced_{date_time}_{lease}.csv", index = False)
-
-if False:
-    # Read in WITH leases
-    # df_replaced = pd.read_csv(output_folder / "rlp_with_dollar_per_mile_replaced_20240411_133452.csv")
-    # WITHOUT leases
-    df_replaced = pd.read_csv(output_folder / "rlp_with_dollar_per_mile_replaced_myear_20240413_064557_no_lease.csv")
-
-    def aggregate_to_market(df, most_common_trim_features):
+####################################################################################################
+# Step 4: Aggregate to the market level
+def aggregate_to_market(df, most_common_trim_features):
         """Aggregates the data to the market level.
         We assume that with in each make, model, model_year, trim, range_elec, and fuel - the other features are all the same."""
 
@@ -284,11 +304,18 @@ if False:
 
         return output_zips, output_counties, output_myear
 
+####### Create or read
+if do_aggregate_to_market != "read_in":
     aggregated_zips, aggregated_counties, aggregated_myear = aggregate_to_market(df_replaced, most_common_trim_features)
-    aggregated_zips.to_csv(output_folder / f"rlp_with_dollar_per_mile_replaced_myear_zip_{date_time}_{lease}.csv")
-    aggregated_counties.to_csv(output_folder / f"rlp_with_dollar_per_mile_replaced_myear_county_{date_time}_{lease}.csv")
-    aggregated_myear.to_csv(output_folder / f"rlp_with_dollar_per_mile_replaced_myear_{date_time}_{lease}.csv")
+    aggregated_zips.to_csv(aggregated_zips_destination)
+    aggregated_counties.to_csv(aggregated_counties_destination)
+    aggregated_myear.to_csv(aggregated_myear_destination)
+elif do_aggregate_to_market == "read_in":
+    aggregated_zips = pd.read_csv(aggregated_zips_source)
+    aggregated_counties = pd.read_csv(aggregated_counties_source)
+    aggregated_myear = pd.read_csv(aggregated_myear_source)
 
+if False:
     # Read in with NO LEASE
     # aggregated_myear = pd.read_csv(output_folder / "rlp_with_dollar_per_mile_replaced_myear_20240413_064557_no_lease.csv")
     # aggregated_counties = pd.read_csv(output_folder / "rlp_with_dollar_per_mile_replaced_myear_county_20240413_064557_no_lease.csv")
