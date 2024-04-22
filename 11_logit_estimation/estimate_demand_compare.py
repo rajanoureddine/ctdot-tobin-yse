@@ -80,7 +80,10 @@ Estimation Data: {estimation_data_subfolder}
 Replace ZMS with: {zms_replaced_with}
 -----------------------------------------------------------------------------------
 We have updated the code to incorporate removing makes and model years within the functions.
-We test to ensure we get the same results as comparison_outputs_logit_county_model_year_0416-1336.csv.
+Overall goal is to get the same results as comparison_outputs_logit_county_model_year_0416-1336.csv.
+
+We perform a robustness check by estimating the model, dropping one model year at a time (2018-2022)
+Note that we drop 2016, 2017, and 2023 in the data preparation stage - for ALL estimations. 
 """
 
 description = description_template
@@ -178,47 +181,7 @@ def prepare_rlp_data(df, makes_to_remove = None, mkt_def = "model_year", year_to
     return mkt_data
 
 ############################################################################################################
-rlp_df = pd.read_csv(str_rlp_new)
-exp_mkt_data = prepare_experian_data(makes_to_remove=["Polestar", "Smart", "Lotus", "Scion", "Maserati"])
-
-rlp_mkt_data = prepare_rlp_data(rlp_df, 
-                                makes_to_remove = ["Polestar", "Smart", "Lotus", "Scion", "Maserati"],
-                                mkt_def = rlp_market, zms_replaced_with = zms_replaced_with)
-
-
-
-############################################################################################################
-if False:
-    rlp_mkt_data = rlp_mkt_data[rlp_mkt_data["make"]!="Polestar"]
-    exp_mkt_data = exp_mkt_data[exp_mkt_data["make"]!="Polestar"]
-
-    # Remove Smart from both
-    rlp_mkt_data = rlp_mkt_data[rlp_mkt_data["make"]!="Smart"]
-    exp_mkt_data = exp_mkt_data[exp_mkt_data["make"]!="Smart"]
-
-    # Drop Lotus from both
-    rlp_mkt_data = rlp_mkt_data[rlp_mkt_data["make"]!="Lotus"]
-    exp_mkt_data = exp_mkt_data[exp_mkt_data["make"]!="Lotus"]
-
-    # Drop scion from experian
-    exp_mkt_data = exp_mkt_data[exp_mkt_data["make"]!="Scion"]
-
-    # Drop make Genesis from both
-    # exp_mkt_data = exp_mkt_data[exp_mkt_data["make"]!="Genesis"]
-    # rlp_mkt_data = rlp_mkt_data[rlp_mkt_data["make"]!="Genesis"]
-
-    # Drop Maserati from both
-    exp_mkt_data = exp_mkt_data[exp_mkt_data["make"]!="Maserati"]
-    rlp_mkt_data = rlp_mkt_data[rlp_mkt_data["make"]!="Maserati"]
-
-
-####################
-# run PyBLP models #
-####################
-exp_mkt_data_keep = exp_mkt_data.copy()
-rlp_mkt_data_keep = rlp_mkt_data.copy()
-
-
+# Function to run the logit model
 def run_logit_model(exp_df, rlp_df, subfolder, estimation_data_folder, myear = "all"):
     # Set up the output dataframes
     output_logit = pd.DataFrame()
@@ -301,7 +264,30 @@ def run_logit_model(exp_df, rlp_df, subfolder, estimation_data_folder, myear = "
     output_ols.to_csv(subfolder / f'comparison_outputs_ols_{rlp_market}_{date_time}_{myear}.csv',index = False)
 
 
-run_logit_model(exp_mkt_data, rlp_mkt_data, output_subfolder, estimation_data_subfolder, myear = "all_years")
+############################################################################################################
+exp_mkt_data = prepare_experian_data(makes_to_remove=["Polestar", "Smart", "Lotus", "Scion", "Maserati"])
+
+
+rlp_df = pd.read_csv(str_rlp_new)
+
+
+for dropped_year in [2018, 2019, 2020, 2021, 2022]:
+    print("Dropping year: ", dropped_year)
+    rlp_mkt_data = prepare_rlp_data(rlp_df, 
+                                    makes_to_remove = ["Polestar", "Smart", "Lotus", "Scion", "Maserati"],
+                                    mkt_def = rlp_market, year_to_drop = dropped_year, zms_replaced_with = zms_replaced_with)
+    str_title = f"dropped_{dropped_year}"
+    run_logit_model(exp_mkt_data, rlp_mkt_data, output_subfolder, estimation_data_subfolder, myear = str_title)
+
+
+
+# rlp_mkt_data = prepare_rlp_data(rlp_df, 
+#                                 makes_to_remove = ["Polestar", "Smart", "Lotus", "Scion", "Maserati"],
+#                                 mkt_def = rlp_market, zms_replaced_with = zms_replaced_with)
+# 
+# 
+# 
+# run_logit_model(exp_mkt_data, rlp_mkt_data, output_subfolder, estimation_data_subfolder, myear = "all_years")
 
 
 if False:
