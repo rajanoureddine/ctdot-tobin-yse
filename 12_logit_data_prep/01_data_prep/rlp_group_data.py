@@ -86,9 +86,9 @@ aggregated_zips_destination = output_folder / f"rlp_with_dollar_per_mile_replace
 aggregated_counties_destination = output_folder / f"rlp_with_dollar_per_mile_replaced_myear_county_{date_time}_{lease}.csv"
 aggregated_myear_destination = output_folder / f"rlp_with_dollar_per_mile_replaced_myear_{date_time}_{lease}.csv"
 
-aggregated_zips_source = "rlp_with_dollar_per_mile_replaced_myear_zip_20240422_125027_no_lease.csv"
-aggregated_counties_source = "rlp_with_dollar_per_mile_replaced_myear_county_20240422_125027_no_lease.csv"
-aggregated_myear_source = "rlp_with_dollar_per_mile_replaced_myear_20240422_125027_no_lease.csv"
+aggregated_zips_source = output_folder / "rlp_with_dollar_per_mile_replaced_myear_zip_20240422_125027_no_lease.csv"
+aggregated_counties_source = output_folder / "rlp_with_dollar_per_mile_replaced_myear_county_20240422_125027_no_lease.csv"
+aggregated_myear_source = output_folder / "rlp_with_dollar_per_mile_replaced_myear_20240422_125027_no_lease.csv"
 
 ####################################################################################################
 # Step 1: Identify the most common trim per make and model
@@ -167,7 +167,7 @@ def get_most_common_trim_features(df, most_common_trims):
     
     return output
 
-###### Create & Save
+###### Step 2 Create & Save
 if most_common_trim_features != "read_in":
     most_common_trim_features = get_most_common_trim_features(df_rlp, most_common_trims)
     most_common_trim_features.to_csv(most_common_trims_destination, index=False)
@@ -177,7 +177,7 @@ elif most_common_trim_features == "read_in":
 ####################################################################################################
 # Step 3: In the original data frame, go through each make, model, fuel, and range_elec and replace with the most common trim
 # and the most common trim features for that model year
-def replace_with_most_common_trim(df, most_common_trim_features, electric = False):
+def replace_with_most_common_trim(df, most_common_trim_features, electric = False, use_zips = True):
     """Replace the make, model, trim, fuel, and range_elec with the most common trim for that model year.
     NOTE: We expect that in most_common_trim_features, electric vehicles are treated differently. For electric vehicles,
     EVERY trim is kept - not just the most popular. Consequently, for electric vehicles, we merge differently (we need to)
@@ -195,7 +195,10 @@ def replace_with_most_common_trim(df, most_common_trim_features, electric = Fals
     # Get the columns to merge on and to keep
     cols_merge_on = ["make", "model", "model_year", "fuel", "range_elec"]
     cols_merge_on_noyear = ["make", "model", "fuel", "range_elec"]
-    cols_to_keep = ["veh_count", "county_name", "zip_code"]
+    if use_zips:
+        cols_to_keep = ["veh_count", "county_name", "zip_code"] # Workaround
+    else:
+        cols_to_keep = ["veh_count", "county_name"]
 
    
     # Alter this if electric
@@ -315,15 +318,73 @@ elif do_aggregate_to_market == "read_in":
     aggregated_counties = pd.read_csv(aggregated_counties_source)
     aggregated_myear = pd.read_csv(aggregated_myear_source)
 
-if False:
-    # Read in with NO LEASE
-    # aggregated_myear = pd.read_csv(output_folder / "rlp_with_dollar_per_mile_replaced_myear_20240413_064557_no_lease.csv")
-    # aggregated_counties = pd.read_csv(output_folder / "rlp_with_dollar_per_mile_replaced_myear_county_20240413_064557_no_lease.csv")
-    # Read in with LEASE
-    # aggregated_myear = pd.read_csv(output_folder / "rlp_with_dollar_per_mile_replaced_myear_20240411_183046.csv")
-    # aggregated_counties = pd.read_csv(output_folder / "rlp_with_dollar_per_mile_replaced_myear_county_20240411_183046.csv")
+def rationalize_markets(df_my, mkts_to_rationalize, geographies, threshold, most_common_trim_features):
+    """
+    Rationalize markets by dropping uncommon products, and adding zero market shares for those that are common but not present.
 
-    def rationalize_markets(df_my, df_my_ct, threshold, most_common_trim_features):
+    Input: 
+    mkts_to_rationalize: A data frame grouped by model year, and one grouped by model year and ct.
+    geographies: the geography column, a string
+
+    """
+
+    # Get geographies
+    geogs = pd.Series(mkts_to_rationalize[geographies].drop_duplicates().tolist(), name = geographies)
+
+    # Fix the electric range
+    most_common_trim_features["range_elec"] = round(most_common_trim_features["range_elec"], 2)
+    most_common_trim_features_copy = most_common_trim_features.copy()
+    most_common_trim_features = most_common_trim_features.drop(columns = ["veh_count"])
+
+    # Get the frequency of products per market year, and remove those below the threshold 
+    vars_group_on = ["make", "model", "model_year", "trim", "fuel", "range_elec"]
+    vehs_to_keep = df_my[vars_group_on+["veh_count"]].groupby(vars_group_on).sum().reset_index()
+    assert(vehs_to_keep["veh_count"].sum() == df_my["veh_count"].sum())
+    vehs_to_keep = vehs_to_keep.loc[vehs_to_keep["veh_count"] > threshold, vars_group_on] # Drop veh_count
+
+    # For the model year dataset, we keep only the products with sales above the threshold for that model year
+    df_my_out = df_my.merge(vehs_to_keep, on=["make", "model", "model_year", "trim", "fuel", "range_elec"], how="inner")
+
+    # For the model year and county dataset, we:
+    # 1) Keep only the products with sales above the threshold for that model year - keeping the features columns
+    output = mkts_to_rationalize.merge(vehs_to_keep, on=vars_group_on, how="inner")
+
+    # 2) Add zero market shares for products available in one county in a year but not in another
+    # First, get the unique geographies, and then for every model year, get every county it should be in
+    all_prods_mkts = vehs_to_keep.merge(geogs, how="cross")
+    
+    # Now merge with the original df - unmatched are the zero market shares
+    output = all_prods_mkts.merge(output, on=["make", "model", "model_year", "trim", "fuel", "range_elec", "county_name"], how="left")
+
+    # Put aside matched
+    output_matched = output.loc[output["veh_count"].notna()].drop("Unnamed: 0", axis = 1)# Put this aside
+
+    # For those with zero market shares, replace with 0
+    output_unmatched = output.loc[output["veh_count"].isna(), ["make", "model", "model_year", "trim", "fuel", "range_elec", "county_name"]]
+    output_unmatched["veh_count"] = 0
+    output_unmatched_elec = replace_with_most_common_trim(output_unmatched.loc[output_unmatched["fuel"]=="electric"], most_common_trim_features_copy, electric = True, use_zips =False)
+    output_unmatched_nelec = replace_with_most_common_trim(output_unmatched.loc[output_unmatched["fuel"]!="electric"], most_common_trim_features_copy, use_zips = False)
+    output_unmatched = pd.concat([output_unmatched_elec, output_unmatched_nelec], axis=0, ignore_index = True)
+    
+    output_out = pd.concat([output_matched, output_unmatched], axis=0, ignore_index=True)
+    assert(len(output_out) == len(output))
+    assert(output_out["veh_count"].sum() == output["veh_count"].sum())
+
+    return df_my_out, output_out
+
+
+# Rationalize the markets
+threshold = 20
+aggregated_myear_zms, aggregated_counties_zms = rationalize_markets(aggregated_myear, aggregated_counties, "county_name", threshold, most_common_trim_features)
+aggregated_counties_zms.to_csv(output_folder / f"rlp_with_dollar_per_mile_replaced_myear_county_{date_time}_{lease}_zms.csv")
+aggregated_myear_zms.to_csv(output_folder / f"rlp_with_dollar_per_mile_replaced_myear_{date_time}_{lease}_zms.csv")
+
+
+
+
+
+if False:
+    def rationalize_markets_old(df_my, df_my_ct, threshold, most_common_trim_features):
         """
         Rationalize markets by dropping uncommon products, and adding zero market shares for those that are common but not present.
 
@@ -373,18 +434,6 @@ if False:
         # df_my_out = df_my_out.drop(columns = ["merge_success"])
 
         return df_my_out, df_my_ct_out
-
-    # Rationalize the markets
-    # threshold = 20
-    # aggregated_myear_zms, aggregated_counties_zms = rationalize_markets(aggregated_myear, aggregated_counties, threshold, most_common_trim_features)
-    # 
-    # aggregated_counties_zms.to_csv(output_folder / f"rlp_with_dollar_per_mile_replaced_myear_county_{date_time}_{lease}_zms.csv")
-    # aggregated_myear_zms.to_csv(output_folder / f"rlp_with_dollar_per_mile_replaced_myear_{date_time}_{lease}_zms.csv")
-
-
-
-
-
 
 
 
