@@ -23,13 +23,13 @@ import warnings
 warnings.filterwarnings("ignore")
 
 # Pyblp settings
-pyblp.options.verbose = False
+pyblp.options.verbose = True
 
 ############################################################################################################
 # Settings
 version = "CONNECTICUT"
 model = 'logit'
-integ = 'halton'
+integ = 'gauss'
 dynamic = False
 incl_2021 = True
 # rlp_market = 'model_year'
@@ -48,17 +48,30 @@ if platform.platform()[0:5] == 'macOS':
     output_folder = str_project / str_data / "outputs"
     str_mapping = str_rlp / "brand_to_oem_generated.csv"
     estimation_test = str_data / "estimation_data_test"
-    # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_20240413_064557_no_lease.csv" # NO LEASES
+    # NEW
     str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240415_170934_no_lease_zms.csv" # NO LEASES + COUNTY + ZMS
+    # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240416_141637_inc_leases_zms.csv" # LEASES + COUNTY + ZMS
+    # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240416_141550_inc_leases.csv" # LEASES + COUNTY
+    # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240413_064557_no_lease.csv" # NO LEASES + COUNTY
+
+
+
+
+    # OLD
+    # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_20240413_064557_no_lease.csv" # NO LEASES
+    # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240415_170934_no_lease_zms.csv" # NO LEASES + COUNTY + ZMS
     # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240416_141637_inc_leases_zms.csv" # LEASES + COUNTY + ZMS
     # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_20240411_183046.csv"
 
+    str_agent_data = str_data / "ipums_data" / "agent_data_processed.csv"
+
+
 # Create subfolder for the outputs
-output_subfolder = output_folder / f'comparison_outputs_{rlp_market}_{date_time}'
+output_subfolder = output_folder / f'outputs_{rlp_market}_{date_time}'
 os.mkdir(output_subfolder)
 
 # Create subfolder for the data
-estimation_data_subfolder = estimation_test / f'comparison_data_{rlp_market}_{date_time}'
+estimation_data_subfolder = estimation_test / f'estimation_data_{rlp_market}_{date_time}'
 os.mkdir(estimation_data_subfolder)
 
 ############################################################################################################
@@ -76,21 +89,11 @@ Parameters:
 -----------------------------------------------------------------------------------
 Input: {str_rlp_new}
 Output: {output_subfolder}
+Agent Data: {str_agent_data}
 Estimation Data: {estimation_data_subfolder}
 Replace ZMS with: {zms_replaced_with}
 -----------------------------------------------------------------------------------
-We have updated the code to incorporate removing makes and model years within the functions.
-<<<<<<< HEAD
-Overall goal is to get the same results as comparison_outputs_logit_county_model_year_0416-1336.csv.
-
-We perform a robustness check by estimating the model, dropping one model year at a time (2018-2022)
-Note that we drop 2016, 2017, and 2023 in the data preparation stage - for ALL estimations. 
-=======
-We test to ensure we get the same results as comparison_outputs_logit_county_model_year_0416-1336.csv.
-
-NOTE: this differs from comparison_outputs_county_model_year_0417-0826 only in that we drop the makes
-at the end of the function, as opposed to at the beginning. That should bring us closer to the original version. 
->>>>>>> c93c98bb0b97179a0a9d8093360d80d664196b86
+We run the random coefficients model with agent data.
 """
 
 description = description_template
@@ -270,22 +273,130 @@ def run_logit_model(exp_df, rlp_df, subfolder, estimation_data_folder, myear = "
     output_logit.to_csv(subfolder / f'comparison_outputs_logit_{rlp_market}_{date_time}_{myear}.csv',index = False)
     output_ols.to_csv(subfolder / f'comparison_outputs_ols_{rlp_market}_{date_time}_{myear}.csv',index = False)
 
+############################################################################################################
+# Function to run random coefficients logit model
+def run_rc_logit_model(rlp_df, subfolder, estimation_data_folder, agent_data = None):
+    """
+    Runs a random coefficients logit model without agent data. 
+    We run for the RLP data only - as opposed to the above, that compares.
+    We run for only one specification, not multiple. 
+    """
+    # Set up the estimation hyperparameters
+    integ = 'monte_carlo'
+    n_agent = 5000
+    gmm_rounds = '2s'
+    sigma_guess = np.eye(1) * 4
+    sigma_lb = sigma_guess * 0
+    sigma_ub = sigma_guess * 20
+
+    # Save the market data
+    # exp_df.to_csv(estimation_data_folder / f'exp_mkt_data_{date_time}.csv',index = False)
+    rlp_df.to_csv(estimation_data_folder / f'rc_mkt_data_{rlp_market}_{date_time}.csv',index = False)
+
+    # Create the broad_ev variable
+    rlp_df["broad_ev"] = rlp_df["electric"] + rlp_df["phev"] + rlp_df["hybrid"]
+
+    # Set up the formulation
+    X1_formulation = pyblp.Formulation('0 + prices + dollar_per_mile + electric + phev + hybrid + diesel + log_hp_weight + wheelbase + doors + range_elec + C(make) + C(drivetype) + C(bodytype) + C(county_name)')
+    X2_formulation = pyblp.Formulation('0 + broad_ev') # Therefore K2 = 1)
+    product_formulations = (X1_formulation, X2_formulation)
+
+    # Set up the agent formulation
+    if agent_data is not None:
+        agent_formulation = pyblp.Formulation('0 + income') # D = 1 (income)
+        initial_pi = np.array([[-9]])# K2 x D (1 x 1)
+        pi_ub = np.ones((1))*30
+        pi_lb = np.ones((1))*-30
+
+    # Integration
+    if(integ in ['monte_carlo','halton','mlhs','lhs']):
+        integration = pyblp.Integration(integ, size=n_agent, specification_options={'seed': 0})
+    elif (integ == 'gauss'):
+        integration = pyblp.Integration('grid', size=20)
+    
+    # Get the nodes for the agent data
+    if agent_data is not None:
+        n_nodes = 1  # <- This should be equal to ONE (K2 = 1)
+        df_nodes_all = pd.DataFrame()
+        # generate nodes using pyblp integration tools
+        for mkt_id in agent_data.market_ids.unique():
+            agent_data_nodes = pyblp.build_integration(integration, n_nodes)
+            df_market = pd.DataFrame(agent_data_nodes.nodes, columns = ['nodes'+str(i) for i in range(n_nodes)])
+            df_weights = pd.DataFrame(agent_data_nodes.weights,columns = ['weights'])
+            df_market['weights'] = df_weights
+            df_nodes_all = pd.concat([df_nodes_all,df_market], ignore_index=True)
+        agent_data = pd.concat([agent_data.drop(['weights'],axis=1).reset_index(drop=True),df_nodes_all],axis=1)
+
+
+    # Problem and optimizer
+    if agent_data is not None:
+        mc_problem = pyblp.Problem(product_formulations, rlp_df, agent_data=agent_data, agent_formulation=agent_formulation)
+    else:
+        mc_problem = pyblp.Problem(product_formulations, rlp_df, integration=integration)
+    optim = pyblp.Optimization('l-bfgs-b',{'gtol': 1e-10}) 
+    iter = pyblp.Iteration('squarem') # using squarem acceleration method
+
+    # Log this
+    logging.info(f"Running Random Coefficients Logit Model")
+    logging.info(f"Integration: {integ}")
+    logging.info(f"Agents: {n_agent}")
+    logging.info(f"Sigma Guess: {sigma_guess}")
+    logging.info(f"Sigma Lower Bound: {sigma_lb}")
+    logging.info(f"Sigma Upper Bound: {sigma_ub}")
+    logging.info(f"Optimization: {optim}")
+    logging.info(f"Iteration: {iter}")
+    logging.info(f"GMM Rounds: {gmm_rounds}")
+    logging.info(product_formulations)
+
+    # Solve
+    if agent_data is not None:
+        results1 = mc_problem.solve(sigma=sigma_guess,sigma_bounds=(sigma_lb,sigma_ub),
+                                    pi = initial_pi,pi_bounds=(pi_lb, pi_ub),
+                                    optimization=optim,iteration=iter, method = gmm_rounds)
+    else:
+        results1 = mc_problem.solve(sigma=sigma_guess,sigma_bounds=(sigma_lb,sigma_ub), optimization=optim,iteration=iter, method = gmm_rounds)
+
+    # save results
+    df_rand_coeffs = pd.DataFrame({'param':results1.beta_labels,
+                            'value':results1.beta.flatten(),
+                            'se': results1.beta_se.flatten()})
+    df_sigma = pd.DataFrame({'param': ['sigma_' + s for s in results1.sigma_labels],
+                             'value': np.diagonal(results1.sigma).flatten(),
+                             'se': np.diagonal(results1.sigma_se).flatten()})
+    df_rand_coeffs = pd.concat([df_rand_coeffs,df_sigma],ignore_index=True)
+    df_rand_coeffs[df_rand_coeffs["param"].str.contains('electric')]
+    df_rand_coeffs[df_rand_coeffs["param"].str.contains('phev')]
+    
+    # save to CSV
+    if agent_data is not None:
+        df_rand_coeffs.to_csv(subfolder / f'outputs_rand_coeffs_{rlp_market}_{date_time}_agent.csv',index = False)
+    else:
+        df_rand_coeffs.to_csv(subfolder / f'outputs_rand_coeffs_{rlp_market}_{date_time}.csv',index = False)
+
+
+    
 
 ############################################################################################################
 exp_mkt_data = prepare_experian_data(makes_to_remove=["Polestar", "Smart", "Lotus", "Scion", "Maserati"])
-
-
 rlp_df = pd.read_csv(str_rlp_new)
+rlp_mkt_data = prepare_rlp_data(rlp_df, 
+                                makes_to_remove = ["Polestar", "Smart", "Lotus", "Scion", "Maserati"],
+                                mkt_def = rlp_market, year_to_drop = None, zms_replaced_with = zms_replaced_with)
 
 
-for dropped_year in [2018, 2019, 2020, 2021, 2022]:
-    print("Dropping year: ", dropped_year)
-    rlp_mkt_data = prepare_rlp_data(rlp_df, 
-                                    makes_to_remove = ["Polestar", "Smart", "Lotus", "Scion", "Maserati"],
-                                    mkt_def = rlp_market, year_to_drop = dropped_year, zms_replaced_with = zms_replaced_with)
-    str_title = f"dropped_{dropped_year}"
-    run_logit_model(exp_mkt_data, rlp_mkt_data, output_subfolder, estimation_data_subfolder, myear = str_title)
+agent_data = pd.read_csv(str_agent_data)
+agent_data = agent_data.loc[(agent_data["year"]>2017)&(agent_data["year"]!=2023)].reset_index(drop=True)
 
+run_rc_logit_model(rlp_mkt_data, output_subfolder, estimation_data_subfolder, agent_data)
+
+
+# for dropped_year in [2018, 2019, 2020, 2021, 2022]:
+#     print("Dropping year: ", dropped_year)
+#     rlp_mkt_data = prepare_rlp_data(rlp_df, 
+#                                     makes_to_remove = ["Polestar", "Smart", "Lotus", "Scion", "Maserati"],
+#                                     mkt_def = rlp_market, year_to_drop = dropped_year, zms_replaced_with = zms_replaced_with)
+#     str_title = f"dropped_{dropped_year}"
+#     run_logit_model(exp_mkt_data, rlp_mkt_data, output_subfolder, estimation_data_subfolder, myear = str_title)
 
 
 # rlp_mkt_data = prepare_rlp_data(rlp_df, 

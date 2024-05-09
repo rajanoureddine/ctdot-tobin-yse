@@ -92,7 +92,7 @@ aggregated_myear_source = output_folder / "rlp_with_dollar_per_mile_replaced_mye
 
 # 0e Rationalize market
 do_rationalize_market = "do"
-threshold = 50
+threshold = 20
 rationalized_my_dest = output_folder / f"rlp_with_dollar_per_mile_replaced_myear_{date_time}_{lease}_zms.csv"
 rationalized_my_ct_dest = output_folder / f"rlp_with_dollar_per_mile_replaced_myear_county_{date_time}_{lease}_zms.csv"
 rationalized_my_zip_dest = output_folder / f"rlp_with_dollar_per_mile_replaced_myear_zip_{date_time}_{lease}_zms.csv"

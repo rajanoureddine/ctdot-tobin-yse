@@ -203,8 +203,8 @@ if model == 'rc':
     #X2_formulation = pyblp.Formulation('0 + electric:t1 + electric:t2 + electric:t3')
     #X1_formulation = pyblp.Formulation('0 + prices + dollar_per_mile + electric + phev + hybrid + diesel + log_hp_weight + wheelbase + doors + range_elec + C(make) + C(drivetype) + C(bodytype)')
     X1_formulation = pyblp.Formulation('0 + prices + dollar_per_mile + electric + phev + hybrid + diesel + log_hp_weight + wheelbase + doors + range_elec:time_trend + C(make) + C(drivetype) + C(bodytype) + C(state)')
-
     X2_formulation = pyblp.Formulation('0 + broad_ev')
+
     product_formulations = (X1_formulation, X2_formulation)
     # should look into alt integration approaches
     if(integ in ['monte_carlo','halton','mlhs','lhs']):
@@ -236,6 +236,7 @@ if model == 'rc':
     df_rand_coeffs[df_rand_coeffs["param"].str.contains('electric')]
     df_rand_coeffs[df_rand_coeffs["param"].str.contains('phev')]
     results = results1
+
 if model == 'rc_demo' or model == 'rc_demo_moments' or model == 'rc_nl' or model == 'rc_nl_moments':
     # create a dataframe that stores the random coefficients, which demographics they're interacted with, etc.
     #dict_X2 = {'broad_ev': ['rc','urban'],
@@ -256,6 +257,7 @@ if model == 'rc_demo' or model == 'rc_demo_moments' or model == 'rc_nl' or model
     for x2 in dict_X2:
         if x2 != '1':
             str_x2_formulation = str_x2_formulation + '+' + x2
+    # 1 + broad_ev + prices
     
     X2_formulation = pyblp.Formulation(str_x2_formulation)
     product_formulations = (X1_formulation,X2_formulation)
