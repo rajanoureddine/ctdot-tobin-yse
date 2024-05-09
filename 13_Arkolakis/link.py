@@ -6,7 +6,7 @@ class Link():
     2----------------
     |               |
     0 ------------- 1
-    As a default, there is a one-way link between nodes 0 and 1. This represents a standard link.
+    The primary link is between nodes 0 and 1. This link is uni-directional.
     As a default, each link has one weight. This weight is the cost of traversing the link.
     """
 
@@ -20,6 +20,19 @@ class Link():
         # Set the default link
         self.adjacency[0,1] = 1
 
+    def set_main_weight(self, weight):
+        """
+        Set the weight of the primary link.
+        """
+        self.weights[0,1] = weight
+
+    def unlink(self):
+        """
+        Unlink the primary nodes.
+        """
+        self.adjacency[0,1] = 0
+        
+
     def set_link(self, node1, node2, weight):
         """
         Set a link between two nodes.
@@ -27,10 +40,6 @@ class Link():
         self.adjacency[node1, node2] = 1
         self.weights[node1, node2] = weight
 
-if __name__ == "__main__":
-    link = Link()
-    print(link.adjacency)
-    print(link.weights)
-    print(link.adjacency[0,1])
-    print(link.weights[0,1])
+
+
     

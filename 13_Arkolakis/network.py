@@ -4,6 +4,7 @@ from bf_extended import GraphExtended
 import pickle
 import datetime
 from pathlib import Path
+from link import Link
 
 class AdjWeightGenerator():
     def __init__(self, dim):
@@ -38,25 +39,48 @@ class AdjWeightGenerator():
                 j_is_neighbour = (same_row and col_adjacent) or (same_col and row_adjacent)
 
                 if j_is_neighbour:
-                    self.adjacency[i, j] = np.random.choice([0,1], 1, p=[0.3, 0.7])[0]
+                    # Decide whether to link the two nodes
+                    create_link = np.random.choice([0,1], 1, p=[0.3, 0.7])[0]
+
+                    if create_link:
+                        new_link = Link()
+                        self.adjacency[i,j] = new_link
+
+                    # Old when not using Link class
+                    # self.adjacency[i, j] = np.random.choice([0,1], 1, p=[0.3, 0.7])[0]
         
         # Set all diagonal elements to 0
         for i in range(self.size**2):
-            self.adjacency[i,i] = 0
+            self.adjacency[i,i].unlink()  # New when using Link class
+            
+            # Old when not using Link class
+            # self.adjacency[i,i] = 0
         
         return self.adjacency
     
     def generate_weights(self, charging = False):
         for i in range(self.size**2):
             for j in range(self.size**2):
-                if not charging:
-                    self.weight_matrix[i,j] = 1
-                elif charging:
-                    self.weight_matrix[i,j] = np.random.choice([-1,1], 1, p = [0.3, 0.7])[0]
-            
-        return self.weight_matrix
+                if self.adjacency[i,j]: # Returns True if it is a link object, False otherwise
+                    self.adjacency[i,j].set_main_weight(1)
+
+    # def generate_weights(self, charging = False):
+    #     for i in range(self.size**2):
+    #         for j in range(self.size**2):
+    #             if not charging:
+    #                 self.adjacency[i,j].set_main_weight(1)
+    #                 # Old when not using Link class
+    #                 # self.weight_matrix[i,j] = 1
+    #             elif charging:
+# 
+    #                 # Old when not using Link class
+    #                 # self.weight_matrix[i,j] = np.random.choice([-1,1], 1, p = [0.3, 0.7])[0]
+    #         
+    #     return self.weight_matrix
 
     def load_graph(self, constraint):
+        pass 
+
         # Set constraint
         constraint = np.array([constraint]).reshape(-1)
 
