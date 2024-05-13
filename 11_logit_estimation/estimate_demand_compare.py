@@ -38,7 +38,7 @@ date_time = time.strftime("%m%d-%H%M")
 zms_replaced_with = 0.01
 
 ############################################################################################################
-# Set up main paths
+# Set up main paths and directories
 if platform.platform()[0:5] == 'macOS':
     on_cluster = False
     cd = pathlib.Path().resolve().parent
