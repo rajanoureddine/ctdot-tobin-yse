@@ -106,10 +106,10 @@ def generate_sample(df, N_obs, alt_2022 = False):
     return result[['state', 'countyfip', "year", 'model_year', 'market_ids', 'income', 'single_fam', 'urban', 'college_grad', 'weights']]
 
 
-samples = generate_sample(dt_ipums, 5000)
-samples_2022 = generate_sample(dt_ipums.loc[dt_ipums["year"]==2021], 5000, alt_2022=True)
+samples = generate_sample(dt_ipums, 2000)
+samples_2022 = generate_sample(dt_ipums.loc[dt_ipums["year"]==2021], 2000, alt_2022=True)
 samples = pd.concat([samples, samples_2022], ignore_index=True)
-samples.to_csv(f"{str_dir}/ipums_data/agent_data_processed.csv", index=False)
+samples.to_csv(f"{str_dir}/ipums_data/agent_data_processed_2000.csv", index=False)
 
 if False:
     # Read and handle charging density data

@@ -55,8 +55,13 @@ str_sales_vin_characteristic = str_rlp / "rlp_with_dollar_per_mile.csv"
 output_folder = str_project / str_data / "outputs"
 str_mapping = str_rlp / "brand_to_oem_generated.csv"
 estimation_test = str_data / "estimation_data_test"
+# New 05/13/2023 - #Dropped anything with less than 100 sales
+# str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240513_122046_no_lease_zms.csv"
+# New 04/13/2023 - Dropped anything with less than 50 sales
+str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240513_142237_no_lease_zms.csv"
+
 # NEW
-str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240415_170934_no_lease_zms.csv" # NO LEASES + COUNTY + ZMS
+# str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240415_170934_no_lease_zms.csv" # NO LEASES + COUNTY + ZMS
 # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240416_141637_inc_leases_zms.csv" # LEASES + COUNTY + ZMS
 # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240416_141550_inc_leases.csv" # LEASES + COUNTY
 # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240413_064557_no_lease.csv" # NO LEASES + COUNTY
@@ -70,7 +75,7 @@ str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240415
 # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240416_141637_inc_leases_zms.csv" # LEASES + COUNTY + ZMS
 # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_20240411_183046.csv"
 
-str_agent_data = str_data / "ipums_data" / "agent_data_processed.csv"
+str_agent_data = str_data / "ipums_data" / "agent_data_processed_2000.csv"
 
 
 # Create subfolder for the outputs
@@ -106,7 +111,8 @@ Agent Data: {str_agent_data}
 Estimation Data: {estimation_data_subfolder}
 Replace ZMS with: {zms_replaced_with}
 -----------------------------------------------------------------------------------
-We run the random coefficients model with agent data.
+We run the random coefficients model with agent data. We run where we drop products
+with less than 50 sales in a given model year, and with 2000 agents.
 """
 
 description = description_template
@@ -296,11 +302,12 @@ def run_rc_logit_model(rlp_df, subfolder, estimation_data_folder, agent_data = N
     """
     # Set up the estimation hyperparameters
     integ = 'monte_carlo'
-    n_agent = 5000
+    n_agent = 2000
     gmm_rounds = '2s'
-    sigma_guess = np.eye(1) * 4
+    sigma_guess = np.eye(1) * 0
     sigma_lb = sigma_guess * 0
     sigma_ub = sigma_guess * 20
+    sensitivity = 1e-8
 
     # Save the market data
     # exp_df.to_csv(estimation_data_folder / f'exp_mkt_data_{date_time}.csv',index = False)
@@ -317,9 +324,9 @@ def run_rc_logit_model(rlp_df, subfolder, estimation_data_folder, agent_data = N
     # Set up the agent formulation
     if agent_data is not None:
         agent_formulation = pyblp.Formulation('0 + income') # D = 1 (income)
-        initial_pi = np.array([[-9]])# K2 x D (1 x 1)
-        pi_ub = np.ones((1))*30
-        pi_lb = np.ones((1))*-30
+        initial_pi = np.array([[-0.05]])# K2 x D (1 x 1) - if large, it will change utility significantly. 
+        pi_ub = np.ones((1))*10
+        pi_lb = np.ones((1))*-10
 
     # Integration
     if(integ in ['monte_carlo','halton','mlhs','lhs']):
@@ -346,11 +353,12 @@ def run_rc_logit_model(rlp_df, subfolder, estimation_data_folder, agent_data = N
         mc_problem = pyblp.Problem(product_formulations, rlp_df, agent_data=agent_data, agent_formulation=agent_formulation)
     else:
         mc_problem = pyblp.Problem(product_formulations, rlp_df, integration=integration)
-    optim = pyblp.Optimization('l-bfgs-b',{'gtol': 1e-10}) 
+    optim = pyblp.Optimization('l-bfgs-b',{'gtol': sensitivity}) # Reduced sensitivity
     iter = pyblp.Iteration('squarem') # using squarem acceleration method
 
     # Log this
     logging.info(f"Running Random Coefficients Logit Model")
+    logging.info(f"On cluster: {on_cluster}")
     logging.info(f"Integration: {integ}")
     logging.info(f"Agents: {n_agent}")
     logging.info(f"Sigma Guess: {sigma_guess}")
@@ -359,6 +367,7 @@ def run_rc_logit_model(rlp_df, subfolder, estimation_data_folder, agent_data = N
     logging.info(f"Optimization: {optim}")
     logging.info(f"Iteration: {iter}")
     logging.info(f"GMM Rounds: {gmm_rounds}")
+    logging.info(f"Sensitivity: {sensitivity}")
     logging.info(product_formulations)
 
     # Solve
@@ -394,6 +403,9 @@ def run_rc_logit_model(rlp_df, subfolder, estimation_data_folder, agent_data = N
     # save to CSV
     if agent_data is not None:
         df_rand_coeffs.to_csv(subfolder / f'outputs_rand_coeffs_{rlp_market}_{date_time}_agent.csv',index = False)
+        # Also pickle results1
+        with open(subfolder / f'outputs_rand_coeffs_{rlp_market}_{date_time}_agent.pkl', 'wb') as f:
+            pickle.dump(results1, f)
     else:
         df_rand_coeffs.to_csv(subfolder / f'outputs_rand_coeffs_{rlp_market}_{date_time}.csv',index = False)
 
@@ -406,7 +418,6 @@ rlp_df = pd.read_csv(str_rlp_new)
 rlp_mkt_data = prepare_rlp_data(rlp_df, 
                                 makes_to_remove = ["Polestar", "Smart", "Lotus", "Scion", "Maserati"],
                                 mkt_def = rlp_market, year_to_drop = None, zms_replaced_with = zms_replaced_with)
-
 
 agent_data = pd.read_csv(str_agent_data)
 agent_data = agent_data.loc[(agent_data["year"]>2017)&(agent_data["year"]!=2023)].reset_index(drop=True)
