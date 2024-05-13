@@ -51,10 +51,9 @@ class GraphExtended():
                                 # Case 1: if q is less than new_path for the minimization metric, then we don't need to consider the new path
                                 elif (len(self.constraints) == 1) and np.less(q.weight_sum, new_path.weight_sum):
                                     flag = False
-                                    # break
+                                    
                                 elif (len(self.constraints) > 1) and np.less(q.weight_sum[0], new_path.weight_sum[0]):
                                     flag = False
-                                    # break
 
                                 # Case 2: If q is greater than new_path for the minimization metric, then we drop q
                                 elif (len(self.constraints) == 1) and np.greater(q.weight_sum, new_path.weight_sum):
