@@ -38,32 +38,39 @@ date_time = time.strftime("%m%d-%H%M")
 zms_replaced_with = 0.01
 
 ############################################################################################################
-# Set up directories
+# Set up main paths
 if platform.platform()[0:5] == 'macOS':
+    on_cluster = False
     cd = pathlib.Path().resolve().parent
     str_project = cd / "Documents" 
-    str_data = str_project / "tobin_working_data"
-    str_rlp = str_data / "rlpolk_data"
-    str_sales_vin_characteristic = str_rlp / "rlp_with_dollar_per_mile.csv"
-    output_folder = str_project / str_data / "outputs"
-    str_mapping = str_rlp / "brand_to_oem_generated.csv"
-    estimation_test = str_data / "estimation_data_test"
-    # NEW
-    str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240415_170934_no_lease_zms.csv" # NO LEASES + COUNTY + ZMS
-    # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240416_141637_inc_leases_zms.csv" # LEASES + COUNTY + ZMS
-    # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240416_141550_inc_leases.csv" # LEASES + COUNTY
-    # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240413_064557_no_lease.csv" # NO LEASES + COUNTY
+elif platform.platform()[0:5] == 'Linux':
+    on_cluster = True
+    cd = pathlib.Path().resolve()
+    str_project = cd.parent.parent / "rn_home" / "data"
+
+# Set up sub-directories
+str_data = str_project / "tobin_working_data"
+str_rlp = str_data / "rlpolk_data"
+str_sales_vin_characteristic = str_rlp / "rlp_with_dollar_per_mile.csv"
+output_folder = str_project / str_data / "outputs"
+str_mapping = str_rlp / "brand_to_oem_generated.csv"
+estimation_test = str_data / "estimation_data_test"
+# NEW
+str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240415_170934_no_lease_zms.csv" # NO LEASES + COUNTY + ZMS
+# str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240416_141637_inc_leases_zms.csv" # LEASES + COUNTY + ZMS
+# str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240416_141550_inc_leases.csv" # LEASES + COUNTY
+# str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240413_064557_no_lease.csv" # NO LEASES + COUNTY
 
 
 
 
-    # OLD
-    # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_20240413_064557_no_lease.csv" # NO LEASES
-    # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240415_170934_no_lease_zms.csv" # NO LEASES + COUNTY + ZMS
-    # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240416_141637_inc_leases_zms.csv" # LEASES + COUNTY + ZMS
-    # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_20240411_183046.csv"
+# OLD
+# str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_20240413_064557_no_lease.csv" # NO LEASES
+# str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240415_170934_no_lease_zms.csv" # NO LEASES + COUNTY + ZMS
+# str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240416_141637_inc_leases_zms.csv" # LEASES + COUNTY + ZMS
+# str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_20240411_183046.csv"
 
-    str_agent_data = str_data / "ipums_data" / "agent_data_processed.csv"
+str_agent_data = str_data / "ipums_data" / "agent_data_processed.csv"
 
 
 # Create subfolder for the outputs
@@ -73,6 +80,12 @@ os.mkdir(output_subfolder)
 # Create subfolder for the data
 estimation_data_subfolder = estimation_test / f'estimation_data_{rlp_market}_{date_time}'
 os.mkdir(estimation_data_subfolder)
+
+############################################################################################################
+# Check number of nodes on the cluster
+if on_cluster:
+    n_nodes = int(os.getenv("SLURM_CPUS_PER_TASK"))
+    print(f"Number of nodes on cluster: {n_nodes}")
 
 ############################################################################################################
 # Set up logging
@@ -350,11 +363,22 @@ def run_rc_logit_model(rlp_df, subfolder, estimation_data_folder, agent_data = N
 
     # Solve
     if agent_data is not None:
-        results1 = mc_problem.solve(sigma=sigma_guess,sigma_bounds=(sigma_lb,sigma_ub),
-                                    pi = initial_pi,pi_bounds=(pi_lb, pi_ub),
-                                    optimization=optim,iteration=iter, method = gmm_rounds)
+        if on_cluster:
+            with pyblp.parallel(n_nodes):
+                results1 = mc_problem.solve(sigma=sigma_guess,sigma_bounds=(sigma_lb,sigma_ub),
+                                            pi = initial_pi,pi_bounds=(pi_lb, pi_ub),
+                                            optimization=optim,iteration=iter, method = gmm_rounds)
+        else:
+            results1 = mc_problem.solve(sigma=sigma_guess,sigma_bounds=(sigma_lb,sigma_ub),
+                                            pi = initial_pi,pi_bounds=(pi_lb, pi_ub),
+                                            optimization=optim,iteration=iter, method = gmm_rounds)
+
     else:
-        results1 = mc_problem.solve(sigma=sigma_guess,sigma_bounds=(sigma_lb,sigma_ub), optimization=optim,iteration=iter, method = gmm_rounds)
+        if on_cluster:
+            with pyblp.parallel(n_nodes):
+                results1 = mc_problem.solve(sigma=sigma_guess,sigma_bounds=(sigma_lb,sigma_ub), optimization=optim,iteration=iter, method = gmm_rounds)
+        else:
+            results1 = mc_problem.solve(sigma=sigma_guess,sigma_bounds=(sigma_lb,sigma_ub), optimization=optim,iteration=iter, method = gmm_rounds)
 
     # save results
     df_rand_coeffs = pd.DataFrame({'param':results1.beta_labels,
