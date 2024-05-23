@@ -237,7 +237,8 @@ def clean_market_data(mkt_data, mkt_ids):
     # mkt_data["market_ids"] = mkt_data[mkt_ids]
 
     # Get prices 
-    mkt_data['prices'] = mkt_data.msrp - mkt_data.fed_credit
+    print("Calculating prices")
+    mkt_data['prices'] = mkt_data.msrp - mkt_data.fed_credit - mkt_data.state_incentive
 
     # mkt_data['time_trend'] = mkt_data.model_year - 2013
 

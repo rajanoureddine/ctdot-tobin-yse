@@ -58,7 +58,11 @@ estimation_test = str_data / "estimation_data_test"
 # New 05/13/2023 - #Dropped anything with less than 100 sales
 # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240513_122046_no_lease_zms.csv"
 # New 04/13/2023 - Dropped anything with less than 50 sales
-str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240513_142237_no_lease_zms.csv"
+# str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240513_142237_no_lease_zms.csv"
+# New 05/23/2024 - Dropped anything with less than 50 sales and added incentives
+# str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240523_133138_no_lease_zms.csv"
+str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240523_154006_no_lease_zms.csv" # threshold to 20
+
 
 # NEW
 # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240415_170934_no_lease_zms.csv" # NO LEASES + COUNTY + ZMS
@@ -110,7 +114,8 @@ Output: {output_subfolder}
 Estimation Data: {estimation_data_subfolder}
 Replace ZMS with: {zms_replaced_with}
 -----------------------------------------------------------------------------------
-We run the random coefficients logit model for the RLP data, without agent data
+We run the logit estimation for the RLP data and compare it with the Experian data.
+We run a standard logit, no random coefficients. The key difference is that this time we add incentive data. 
 """
 
 description = description_template
@@ -437,7 +442,12 @@ rlp_mkt_data = prepare_rlp_data(rlp_df,
 agent_data = pd.read_csv(str_agent_data)
 agent_data = agent_data.loc[(agent_data["year"]>2017)&(agent_data["year"]!=2023)].reset_index(drop=True)
 
-run_rc_logit_model(rlp_mkt_data, output_subfolder, estimation_data_subfolder)
+
+# Run the random coefficients logit model
+# run_rc_logit_model(rlp_mkt_data, output_subfolder, estimation_data_subfolder)
+
+# Run the logit model
+run_logit_model(exp_mkt_data, rlp_mkt_data, output_subfolder, estimation_data_subfolder, myear = "all_years")
 
 
 # for dropped_year in [2018, 2019, 2020, 2021, 2022]:
