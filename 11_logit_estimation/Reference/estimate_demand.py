@@ -247,7 +247,7 @@ if model == 'rc_demo' or model == 'rc_demo_moments' or model == 'rc_nl' or model
                'prices': ['I(1/income)'],
                '1': ['rc']}
     # product formulations
-    # if 'prices' is one of the keys in dict_X2
+    # if 'prices' is onCe of the keys in dict_X2
     if('prices' in dict_X2.keys()):
         X1_formulation = pyblp.Formulation('0 + dollar_per_mile + electric + phev + hybrid + diesel + log_hp_weight + wheelbase + doors + range_elec + C(make) + C(drivetype) + C(bodytype)')
     else:

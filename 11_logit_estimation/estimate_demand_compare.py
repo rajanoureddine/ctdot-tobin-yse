@@ -107,12 +107,10 @@ Parameters:
 -----------------------------------------------------------------------------------
 Input: {str_rlp_new}
 Output: {output_subfolder}
-Agent Data: {str_agent_data}
 Estimation Data: {estimation_data_subfolder}
 Replace ZMS with: {zms_replaced_with}
 -----------------------------------------------------------------------------------
-We run the random coefficients model with agent data. We run where we drop products
-with less than 50 sales in a given model year, and with 2000 agents.
+We run the random coefficients logit model for the RLP data, without agent data
 """
 
 description = description_template
@@ -300,14 +298,15 @@ def run_rc_logit_model(rlp_df, subfolder, estimation_data_folder, agent_data = N
     We run for the RLP data only - as opposed to the above, that compares.
     We run for only one specification, not multiple. 
     """
+    # If agent data, log it 
+    if agent_data is not None:
+        logging.info(f"Agent Data used: {str_agent_data}")
+
     # Set up the estimation hyperparameters
     integ = 'monte_carlo'
     n_agent = 2000
     gmm_rounds = '2s'
-    sigma_guess = np.eye(1) * 0
-    sigma_lb = sigma_guess * 0
-    sigma_ub = sigma_guess * 20
-    sensitivity = 1e-8
+    sensitivity = 1e-12
 
     # Save the market data
     # exp_df.to_csv(estimation_data_folder / f'exp_mkt_data_{date_time}.csv',index = False)
@@ -317,9 +316,22 @@ def run_rc_logit_model(rlp_df, subfolder, estimation_data_folder, agent_data = N
     rlp_df["broad_ev"] = rlp_df["electric"] + rlp_df["phev"] + rlp_df["hybrid"]
 
     # Set up the formulation
-    X1_formulation = pyblp.Formulation('0 + prices + dollar_per_mile + electric + phev + hybrid + diesel + log_hp_weight + wheelbase + doors + range_elec + C(make) + C(drivetype) + C(bodytype) + C(county_name)')
-    X2_formulation = pyblp.Formulation('0 + broad_ev') # Therefore K2 = 1)
+    X1_formulation_str = '0 + prices + dollar_per_mile + electric + phev + hybrid + diesel + log_hp_weight + wheelbase + doors + range_elec + C(make) + C(drivetype) + C(bodytype) + C(county_name)'
+    X1_formulation = pyblp.Formulation(X1_formulation_str)
+    X2_formulation_str = '1 + broad_ev + prices'
+    X2_formulation = pyblp.Formulation(X2_formulation_str)
     product_formulations = (X1_formulation, X2_formulation)
+
+    # Log the formulations
+    logging.info(f"X1 Formulation: {X1_formulation_str}")
+    logging.info(f"X2 Formulation: {X2_formulation_str}")
+
+    # Set up the sigma formulation
+    K2 = len(X2_formulation_str.split('+'))
+    sigma_guess = np.eye(K2) * 0.005
+    sigma_lb = np.eye(K2) * 0
+    sigma_ub = np.eye(K2) * 10
+    
 
     # Set up the agent formulation
     if agent_data is not None:
@@ -408,6 +420,9 @@ def run_rc_logit_model(rlp_df, subfolder, estimation_data_folder, agent_data = N
             pickle.dump(results1, f)
     else:
         df_rand_coeffs.to_csv(subfolder / f'outputs_rand_coeffs_{rlp_market}_{date_time}.csv',index = False)
+        # Also pickle results1
+        with open(subfolder / f'outputs_rand_coeffs_{rlp_market}_{date_time}.pkl', 'wb') as f:
+            pickle.dump(results1, f)
 
 
     
@@ -422,7 +437,7 @@ rlp_mkt_data = prepare_rlp_data(rlp_df,
 agent_data = pd.read_csv(str_agent_data)
 agent_data = agent_data.loc[(agent_data["year"]>2017)&(agent_data["year"]!=2023)].reset_index(drop=True)
 
-run_rc_logit_model(rlp_mkt_data, output_subfolder, estimation_data_subfolder, agent_data)
+run_rc_logit_model(rlp_mkt_data, output_subfolder, estimation_data_subfolder)
 
 
 # for dropped_year in [2018, 2019, 2020, 2021, 2022]:
