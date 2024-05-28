@@ -1,7 +1,20 @@
+"""
+Implements Dijkstra's algorithm for shortest path in a graph.
+Creates a Graph class, with a number of vertices and weights.
+"""
+
+
 import numpy as np
 
 class Graph:
-    def __init__(self, vertices, weights = 1):
+    def __init__(self, vertices, weights = 1, constraint = None, boost = False):
+        """
+        Initializes a graph of the form [u, v, w] where u is the source, v is the destination, and w is the weight.
+        The graph is represented as a list of lists.
+
+        When boost is True, the graph takes the form [u, v, w, b] where b is a boost value that slackens the constraints.
+        """
+
         self.weights = weights
         self.V = vertices  # No. of vertices
         self.graph = []
@@ -130,24 +143,25 @@ class Graph:
 
 
 
-if __name__ == '__main__':
-    graph_size = 20
-    graph = np.zeros([graph_size, graph_size])
-    for i in range(graph_size):
-        for j in range(graph_size):
-            graph[i][j] = np.random.choice([0, 1], p=[0.6, 0.4])
-    graph_weights = np.random.randint(1, 8, (graph_size, graph_size))
-    g = Graph(graph_size)
-    g_e = GraphExtended(graph_size, 1, np.array([np.infty]))
-    for i in range(graph_size):
-        for j in range(graph_size):
-            if graph[i][j] != 0:
-                g.addEdge(i, j, graph_weights[i][j])
-                g_e.addEdge(i, j, graph_weights[i][j])
-    #g.Dijkstra(0)
-    #print(g.prev)
-    #g.reset()
-    g.BellmanFord(0, True)
-    g_e.BellmanExtended(0, 5)
-    # print(g_e.path[5][0].path)
-   #  print(graph)
+if False:
+    if __name__ == '__main__':
+        graph_size = 20
+        graph = np.zeros([graph_size, graph_size])
+        for i in range(graph_size):
+            for j in range(graph_size):
+                graph[i][j] = np.random.choice([0, 1], p=[0.6, 0.4])
+        graph_weights = np.random.randint(1, 8, (graph_size, graph_size))
+        g = Graph(graph_size)
+        g_e = GraphExtended(graph_size, 1, np.array([np.infty]))
+        for i in range(graph_size):
+            for j in range(graph_size):
+                if graph[i][j] != 0:
+                    g.addEdge(i, j, graph_weights[i][j])
+                    g_e.addEdge(i, j, graph_weights[i][j])
+        #g.Dijkstra(0)
+        #print(g.prev)
+        #g.reset()
+        g.BellmanFord(0, True)
+        g_e.BellmanExtended(0, 5)
+        # print(g_e.path[5][0].path)
+    #  print(graph)

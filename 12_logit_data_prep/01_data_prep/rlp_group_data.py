@@ -188,30 +188,38 @@ def get_most_common_trim_features(df, most_common_trims):
 # Step 3: In the original data frame, go through each make, model, fuel, and range_elec and replace with the most common trim
 def replace_with_most_common_trim(df, most_common_trim_features, electric = False, use_zips = True):
     """
-    Replace the make, model, trim, fuel, and range_elec with the most common trim for that model year.
+    In the original data frame, replace vehicle features with those of the most common trim for that make, model, fuel, and range_elec.
+    
+    This function matches each row to an appropriate trim, based on its make, model, fuel, and range_elec.
+
     NOTE: We expect that in most_common_trim_features, electric vehicles are treated differently. For electric vehicles,
     EVERY trim is kept - not just the most popular. Consequently, for electric vehicles, we merge differently (we need to)
     also include the "trim" column in what to merge on.
+
+    Parameters:
+    - electric: A boolean indicating whether to run this for electric vehicles. If True, we keep all trims for electric vehicles.
+    - use_zips: A boolean indicating whether to use zip codes or counties. If True, we use zip codes.
     """
 
     # Prepare a column to record successful merges
     most_common_trim_features["merge_success"] = 1
 
-    # Fix range_elec for later - this appears to be causing an issue with Tesla Model X
-    if electric:
-        most_common_trim_features["range_elec"] = round(most_common_trim_features["range_elec"], 2)
-        df["range_elec"] = round(df["range_elec"], 2)
+    # Round range to facilitate matching
+    most_common_trim_features["range_elec"] = round(most_common_trim_features["range_elec"], 2)
+    df["range_elec"] = round(df["range_elec"], 2)
 
-    # Get the columns to merge on and to keep
+    # The unique identifier for a product is its make, model, fuel, and range_elec.
+    # For each of these unique identifiers, for each model year, we assign the most common trim
     cols_merge_on = ["make", "model", "model_year", "fuel", "range_elec"]
     cols_merge_on_noyear = ["make", "model", "fuel", "range_elec"]
+
+    # Additionally keep the sales column and the zip code or county name
     if use_zips:
         cols_to_keep = ["veh_count", "zip_code"] # Workaround
     else:
         cols_to_keep = ["veh_count", "county_name"]
 
-   
-    # Alter this if electric
+    # For electric vehicles, we keep all trims and do not simplify the products
     if electric:
         cols_merge_on = cols_merge_on + ["trim"]
         cols_merge_on_noyear = cols_merge_on_noyear + ["trim"]
@@ -224,12 +232,10 @@ def replace_with_most_common_trim(df, most_common_trim_features, electric = Fals
     assert(len(output) == len(df))
     assert(output["veh_count"].sum() == df["veh_count"].sum())
 
-    # Note that in some cases, the most common trim is not available for that model year
-    # In these cases, we will have NaNs in the output. We get closest available model year
+    # Note that in some cases, the most common trim is not available for a given model year
+    # In these cases, we use the most common model year for that trim
     output_merged = output.loc[output["merge_success"] == 1]
     output_not_merged = output.loc[output["merge_success"] != 1, cols_merge_on + cols_to_keep]
-    
-    output_not_merged["range_elec"] = round(output_not_merged["range_elec"], 2)
 
     # Get the model year with the highest sales for each make, model, trim, fuel, and range_elec
     most_common_trim_features_top = most_common_trim_features.sort_values("veh_count", ascending=False).drop_duplicates(cols_merge_on_noyear)
@@ -246,7 +252,7 @@ def replace_with_most_common_trim(df, most_common_trim_features, electric = Fals
     # Combine the two data frames
     output = pd.concat([output_merged, output_not_merged], axis=0)
 
-    # Confirm this has worked correctly
+    # Confirm this has worked correctly and that we have not lost any sales
     assert(len(output) == len(df))
     assert(output["veh_count"].sum() == df["veh_count"].sum())
 
@@ -254,39 +260,42 @@ def replace_with_most_common_trim(df, most_common_trim_features, electric = Fals
 
 # Step 4: Aggregate to the market level
 def aggregate_to_market(df, most_common_trim_features):
-        """Aggregates the data to the market level.
-        We assume that with in each make, model, model_year, trim, range_elec, and fuel - the other features are all the same."""
+        """
+        Aggregates the data to the market level.
+        We assume that with in each make, model, model_year, trim, range_elec, and fuel - the other features are all the same.
 
+        Throughout, we aggregate to two levels:
+        - Model year only
+        - Model year and county
+        """
+
+        # Round range to facilitate matching
         df["range_elec"] = round(df["range_elec"], 2)
         most_common_trim_features["range_elec"] = round(most_common_trim_features["range_elec"], 2)
 
+        # Prepare the most common trim features
         most_common_trim_features_orig = most_common_trim_features.copy()
         most_common_trim_features = most_common_trim_features.drop(columns = ["veh_count"])
         
         # Aggregate and check
         output_counties = df[["make", "model", "model_year", "trim", "fuel", "range_elec", "county_name", "veh_count"]].groupby(["make", "model", "model_year", "trim", "fuel", "range_elec", "county_name"]).sum().reset_index()
-        # output_zips = df[["make", "model", "model_year", "trim", "fuel", "range_elec", "zip_code", "veh_count"]].groupby(["make", "model", "model_year", "trim", "fuel", "range_elec", "zip_code"]).sum().reset_index()
         output_myear = df[["make", "model", "model_year", "trim", "fuel", "range_elec", "veh_count"]].groupby(["make", "model", "model_year", "trim", "fuel", "range_elec"]).sum()
         assert(output_counties["veh_count"].sum() == df["veh_count"].sum())
         assert(output_myear["veh_count"].sum() == df["veh_count"].sum())
-        # assert(output_zips["veh_count"].sum() == df["veh_count"].sum())
+    
 
         # WE GET NAs here - where the most popular trim is not available in a given model_year
         output_counties = output_counties.merge(most_common_trim_features, on = ["make", "model", "model_year", "trim", "fuel", "range_elec"], how = 'left')
         output_myear = output_myear.merge(most_common_trim_features, on = ["make", "model", "model_year", "trim", "fuel", "range_elec"], how = 'left')
-        # output_zips = output_zips.merge(most_common_trim_features, on = ["make", "model", "model_year", "trim", "fuel", "range_elec"], how = 'left')
         assert(output_counties["veh_count"].sum() == df["veh_count"].sum())
         assert(output_myear["veh_count"].sum() == df["veh_count"].sum())
-        # assert(output_zips["veh_count"].sum() == df["veh_count"].sum())
 
         # Split into matched and unmatched
         output_counties_matched = output_counties[output_counties["msrp"].notna()]
         output_counties_unmatched = output_counties.loc[output_counties["msrp"].isna(), ["make", "model", "model_year", "trim", "fuel", "range_elec", "county_name", "veh_count"]]
         output_myear_matched = output_myear[output_myear["msrp"].notna()]
         output_myear_unmatched = output_myear.loc[output_myear["msrp"].isna(), ["make", "model", "model_year", "trim", "fuel", "range_elec", "veh_count"]]
-        # output_zips_matched = output_zips[output_zips["msrp"].notna()]
-        # output_zips_unmatched = output_zips.loc[output_zips["msrp"].isna(), ["make", "model", "model_year", "trim", "fuel", "range_elec", "zip_code", "veh_count"]]
-
+        
         # Get the top year
         most_common_trim_features_top = most_common_trim_features_orig.sort_values("veh_count", ascending=False).drop_duplicates(subset = ["make", "model", "trim", "fuel", "range_elec"])
         most_common_trim_features_top = most_common_trim_features_top.drop("veh_count", axis = 1)
@@ -295,15 +304,12 @@ def aggregate_to_market(df, most_common_trim_features):
         cols = {"model_year_x": "model_year", "model_year_y": "model_year_matched"}
         output_counties_unmatched_fixed = output_counties_unmatched.merge(most_common_trim_features_top, on = ["make", "model", "trim", "fuel", "range_elec"], how = 'left').rename(columns =cols)
         output_myear_unmatched_fixed = output_myear_unmatched.merge(most_common_trim_features_top, on = ["make", "model", "trim", "fuel", "range_elec"], how = 'left').rename(columns =cols)
-        # output_zips_unmatched_fixed = output_zips_unmatched.merge(most_common_trim_features_top, on = ["make", "model", "trim", "fuel", "range_elec"], how = 'left').rename(columns =cols)
 
         assert(len(output_counties_unmatched_fixed)== len(output_counties_unmatched))
         assert(len(output_myear_unmatched_fixed) == len(output_myear_unmatched))
-        # assert(len(output_zips_unmatched_fixed) == len(output_zips_unmatched))
 
         output_counties = pd.concat([output_counties_matched, output_counties_unmatched_fixed], ignore_index=True)
         output_myear = pd.concat([output_myear_matched, output_myear_unmatched_fixed], ignore_index=True)
-        # output_zips = pd.concat([output_zips_matched, output_zips_unmatched_fixed], ignore_index=True)
 
         return output_counties, output_myear
 
