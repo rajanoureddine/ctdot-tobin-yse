@@ -62,25 +62,26 @@ estimation_test = str_data / "estimation_data_test"
 # New 05/23/2024 - Dropped anything with less than 50 sales and added incentives
 # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240523_133138_no_lease_zms.csv"
 str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240523_154006_no_lease_zms.csv" # threshold to 20
+str_micro_moments = str_data / "micro_moment_data" / "micro_moments_20240611.csv"
 
+if False:
+    a = 1
+    # NEW
+    # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240415_170934_no_lease_zms.csv" # NO LEASES + COUNTY + ZMS
+    # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240416_141637_inc_leases_zms.csv" # LEASES + COUNTY + ZMS
+    # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240416_141550_inc_leases.csv" # LEASES + COUNTY
+    # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240413_064557_no_lease.csv" # NO LEASES + COUNTY
 
-# NEW
-# str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240415_170934_no_lease_zms.csv" # NO LEASES + COUNTY + ZMS
-# str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240416_141637_inc_leases_zms.csv" # LEASES + COUNTY + ZMS
-# str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240416_141550_inc_leases.csv" # LEASES + COUNTY
-# str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240413_064557_no_lease.csv" # NO LEASES + COUNTY
-
-
-
-
-# OLD
-# str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_20240413_064557_no_lease.csv" # NO LEASES
-# str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240415_170934_no_lease_zms.csv" # NO LEASES + COUNTY + ZMS
-# str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240416_141637_inc_leases_zms.csv" # LEASES + COUNTY + ZMS
-# str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_20240411_183046.csv"
+    # OLD
+    # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_20240413_064557_no_lease.csv" # NO LEASES
+    # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240415_170934_no_lease_zms.csv" # NO LEASES + COUNTY + ZMS
+    # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240416_141637_inc_leases_zms.csv" # LEASES + COUNTY + ZMS
+    # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_20240411_183046.csv"
 
 str_agent_data = str_data / "ipums_data" / "agent_data_processed_2000.csv"
 
+# Get updated W
+w_mat_str = output_folder / "outputs_county_model_year_0601-0700" / "outputs_rand_coeffs_county_model_year_0601-0700.pkl"
 
 # Create subfolder for the outputs
 output_subfolder = output_folder / f'outputs_{rlp_market}_{date_time}'
@@ -117,7 +118,7 @@ Replace ZMS with: {zms_replaced_with}
 We run a random coefficients model with no agent data, where we include incentives in the RLP data.
 """
 
-description = description_template
+description = input("Please provide a description of what this run is doing: ")
 
 if not description:
     raise ValueError("Please provide a description of the estimation")
@@ -292,7 +293,7 @@ def run_logit_model(exp_df, rlp_df, subfolder, estimation_data_folder, myear = "
     output_ols.to_csv(subfolder / f'comparison_outputs_ols_{rlp_market}_{date_time}_{myear}.csv',index = False)
 
 # Function to run random coefficients logit model
-def run_rc_logit_model(rlp_df, subfolder, estimation_data_folder, agent_data = None):
+def run_rc_logit_model(rlp_df, subfolder, estimation_data_folder, agent_data = None, use_micro_moments = False):
     """
     Runs a random coefficients logit model without agent data. 
     We run for the RLP data only - as opposed to the above, that compares.
@@ -313,12 +314,12 @@ def run_rc_logit_model(rlp_df, subfolder, estimation_data_folder, agent_data = N
     rlp_df.to_csv(estimation_data_folder / f'rc_mkt_data_{rlp_market}_{date_time}.csv',index = False)
 
     # Create the broad_ev variable
-    rlp_df["broad_ev"] = rlp_df["electric"] + rlp_df["phev"] + rlp_df["hybrid"]
+    rlp_df["broad_ev_nohybrid"] = rlp_df["electric"] + rlp_df["phev"]
 
     # Set up the formulation
-    X1_formulation_str = '0 + dollar_per_mile + electric + phev + hybrid + diesel + log_hp_weight + wheelbase + doors + range_elec + C(make) + C(drivetype) + C(bodytype) + C(county_name)'
+    X1_formulation_str = '0 + prices + dollar_per_mile + electric + phev + hybrid + diesel + wheelbase + log_hp_weight + doors + range_elec + C(make) + C(drivetype) + C(bodytype)'
     X1_formulation = pyblp.Formulation(X1_formulation_str)
-    X2_formulation_str = '1 + broad_ev + prices'
+    X2_formulation_str = '1+broad_ev_nohybrid'
     X2_formulation = pyblp.Formulation(X2_formulation_str)
     product_formulations = (X1_formulation, X2_formulation)
 
@@ -327,7 +328,7 @@ def run_rc_logit_model(rlp_df, subfolder, estimation_data_folder, agent_data = N
     logging.info(f"X2 Formulation: {X2_formulation_str}")
 
     # Set up the sigma formulation
-    K2 = len(X2_formulation_str.split('+'))
+    K2 = len(X2_formulation_str.split('+')) - (1 * ('0' in X2_formulation_str))
     sigma_guess = np.eye(K2) * 0.005
     sigma_lb = np.eye(K2) * 0
     sigma_ub = np.eye(K2) * 10
@@ -359,6 +360,13 @@ def run_rc_logit_model(rlp_df, subfolder, estimation_data_folder, agent_data = N
             df_nodes_all = pd.concat([df_nodes_all,df_market], ignore_index=True)
         agent_data = pd.concat([agent_data.drop(['weights'],axis=1).reset_index(drop=True),df_nodes_all],axis=1)
 
+    # Load weighting matrix
+    with open(w_mat_str, 'rb') as f:
+        w_mat = pickle.load(f)
+    w_mat = w_mat.updated_W
+    w_mat = np.append(w_mat, w_mat[62:, :], axis = 0) # Add the last row to the bottom
+    w_mat = np.append(w_mat, w_mat[:, [62]], axis = 1)
+
 
     # Problem and optimizer
     if agent_data is not None:
@@ -367,6 +375,52 @@ def run_rc_logit_model(rlp_df, subfolder, estimation_data_folder, agent_data = N
         mc_problem = pyblp.Problem(product_formulations, rlp_df, integration=integration)
     optim = pyblp.Optimization('l-bfgs-b',{'gtol': sensitivity}) # Reduced sensitivity
     iter = pyblp.Iteration('squarem') # using squarem acceleration method
+
+    # Add micro-moments, if included
+    if use_micro_moments:
+        # Get unobserved agent characteristics
+        unobserved_chars = integration._build(K2)[0][:,0]
+
+        # Get index of broad EV data
+        broad_ev_index = X2_formulation_str.split('+').index('broad_ev_nohybrid')
+        micro_statistics = pd.read_csv(str_micro_moments)
+        micro_statistic_val = micro_statistics.value.values[0]
+
+        # Set up micro_dataset
+        micro_dataset = pyblp.MicroDataset(
+            name = "InMoment", # Observations for all years, filtered for CT only
+            observations = 69528, # Total observations in 2018-2022 for New England
+            compute_weights=lambda t, p, a: np.ones((n_agent, p.size, p.size))
+        )
+
+        # Define the first MicroPart for first and second choices being an EV
+        sc_ev_part = pyblp.MicroPart(
+            name="E[broad_ev_1 * broad_ev_2]",
+            dataset=micro_dataset,
+            compute_values = lambda t,p,a: np.einsum('i,j,k->ijk', unobserved_chars, p.X2[:, broad_ev_index], p.X2[:, broad_ev_index])  
+        )
+
+        # Define the second MicroPart for first choice being an EV
+        ev_part = pyblp.MicroPart(
+            name="E[broad_ev_1]",
+            dataset=micro_dataset,
+            compute_values=lambda t,p,a: np.einsum('i,j,k->ijk',unobserved_chars, p.X2[:, broad_ev_index], p.X2[:, 0])
+        )
+
+        # Define the anonymous functions for computing the ratio and its gradient
+        compute_ratio = lambda v: v[0] / v[1] 
+        compute_ratio_gradient = lambda v: [1 / v[1], -v[0] / v[1]**2]
+
+        # Define the micro-moments
+        micro_moments = [
+            pyblp.MicroMoment(name="E[broad_ev_2 | broad_ev_1]", 
+            value=float(micro_statistic_val),
+            parts=[sc_ev_part, ev_part],
+            compute_value=compute_ratio,
+            compute_gradient=compute_ratio_gradient,
+            )
+        ]
+
 
     # Log this
     logging.info(f"Running Random Coefficients Logit Model")
@@ -389,7 +443,10 @@ def run_rc_logit_model(rlp_df, subfolder, estimation_data_folder, agent_data = N
                                         optimization=optim,iteration=iter, method = gmm_rounds)
 
     else:
-        results1 = mc_problem.solve(sigma=sigma_guess,sigma_bounds=(sigma_lb,sigma_ub), optimization=optim,iteration=iter, method = gmm_rounds)
+        if use_micro_moments:
+            results1 = mc_problem.solve(sigma=sigma_guess,sigma_bounds=(sigma_lb,sigma_ub), optimization=optim,iteration=iter, method = gmm_rounds, micro_moments = micro_moments, W = w_mat)
+        else:
+            results1 = mc_problem.solve(sigma=sigma_guess,sigma_bounds=(sigma_lb,sigma_ub), optimization=optim,iteration=iter, method = gmm_rounds)
 
     # save results
     df_rand_coeffs = pd.DataFrame({'param':results1.beta_labels,
@@ -418,7 +475,85 @@ def run_rc_logit_model(rlp_df, subfolder, estimation_data_folder, agent_data = N
         with open(subfolder / f'outputs_rand_coeffs_{rlp_market}_{date_time}.pkl', 'wb') as f:
             pickle.dump(results1, f)
 
+# Function to set up micro-moments
+if False:
+    def get_micro_moments(micro_statics_path, broad_ev_index):
+        """ 
+        Defining micro_dataset: 
+            Note that this is not an actual dataset, just metadata about the dataset that was used
+            to generate the observed values of the micro-moments. The key purpose of this is to model the probability
+            of observing each product, market, and indivdual type in the micro-dataset. 
+
+            Note that we represent the probability of observing each, market, product, and individual in the micro-dataset as follows:
+            P_A(n is in Nd | tn = t, jn = j, kn = k, in = i) = w_dijkt. 
+
+            This is the probability, under the aggregate data distribution, that a particular market, product, second choice, and individual
+            type is observed in the micro-dataset. 
+
+            We define the InMoment Dataset, for all years. We don't expect that second choice probabilities  will vary by year.
+            compute_weights:
+                returns w_dijk for each t in markets T. This is the probability of observing an agent of type i, first choice j, and second choice k,
+                    in the InMoment dataset, for that market t in T. 
+                compute_weights = lambda t, p, a: np.ones((a.size, 1 + p.size, p.size) returns an array of shape:
+                    (n_agents_t x (n_products_t + 1) x n_products_t) if we assume first choice could be outside option
+                    (n_agents_t x n_products_t x n_products_t) if we assume first choice cannot be outside option
+                for each market t.Each entry in this array is the probability of observing an agent of type i, first choice j, second choice k. 
+                We use uniform weights, this means that each agent, first, and second choice has equal probability of being observed in the micro-dataset.
+                CONDITIONAL on the aggregate data (i.e., we don't need to further adjust for the fact that some makes, models, etc. are more common than others)
+
+        Defining micro_parts:
+            compute_values:
+                This function computes micro-values v_pijkt: the micro-value for each individual, first, and second choice, for market t in T. 
+                The micro_part is in turn calculated by taking the expectation of these micro-values over individuals, first choices, and second choices.
+                The array returned by compute_values should be of the same shape as the weights returned by compute_weights of the dataset.
+
+        """
+        # Get micro-statistics
+        micro_statistics = pd.read_csv(micro_statics_path)
+        micro_statistic_val = micro_statistics.value.values[0]
+
+        # Set up micro_dataset
+        micro_dataset = pyblp.MicroDataset(
+            name = "InMoment", # Observations for all years, filtered for CT only
+            observations = 69528, # Total observations in 2018-2022 for New England
+            compute_weights=lambda t, p, a: np.ones((a.size, p.size, p.size))
+            #, market_ids = df.market_ids.unique().tolist() <- assume comes from all markets.
+        )
+        # Define the first MicroPart for first and second choices being an EV
+        sc_ev_part = pyblp.MicroPart(
+            name="E[broad_ev_1 * broad_ev_2]",
+            dataset=micro_dataset,
+            compute_values=lambda t, p, a: np.einsum('i,j,k->ijk',
+            a.demographics[:, 0], # I.e., unconditional on agent type - this is an expectation that is same for all agent types
+            p.X2[:, broad_ev_index],  # (n x 1) Operands - here tells us which of the first choices is broad EV
+            p.X2[:, broad_ev_index])  # (n x 1)Operands) - here tells us which of (second?) choices is broad EV
+        )
+        # Define the second MicroPart for first choice being an EV
+        ev_part = pyblp.MicroPart(
+            name="E[broad_ev_1]",
+            dataset=micro_dataset,
+            compute_values=lambda t, p, a: np.einsum('i,j,k->ijk',a.demographics[:, 0], p.X2[:, broad_ev_index], p.X2[:, 0])
+        )
+
+        # Define the anonymous functions for computing the ratio and its gradient
+        compute_ratio = lambda v: v[0] / v[1] 
+        compute_ratio_gradient = lambda v: [1 / v[1], -v[0] / v[1]**2]
+
+        # Define the micro-moments
+        micro_moments = [
+            pyblp.MicroMoment(name="E[broad_ev_2 | broad_ev_1]", 
+            value=float(micro_statistic_val),
+            parts=[sc_ev_part, ev_part],
+            compute_value=compute_ratio,
+            compute_gradient=compute_ratio_gradient,
+            )
+        ]
+
+        # Return
+        return micro_moments
     
+
+
 ############################################################################################################
 # Prepare the data
 # Experian
@@ -436,7 +571,8 @@ agent_data = agent_data.loc[(agent_data["year"]>2017)&(agent_data["year"]!=2023)
 
 ############################################################################################################
 # Run the random coefficients logit model
-run_rc_logit_model(rlp_mkt_data, output_subfolder, estimation_data_subfolder)
+run_rc_logit_model(rlp_mkt_data, output_subfolder, estimation_data_subfolder, use_micro_moments = True)
+
 
 # Run the logit model
 # run_logit_model(exp_mkt_data, rlp_mkt_data, output_subfolder, estimation_data_subfolder, myear = "all_years")
