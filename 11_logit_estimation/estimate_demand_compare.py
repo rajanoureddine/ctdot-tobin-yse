@@ -63,6 +63,7 @@ estimation_test = str_data / "estimation_data_test"
 # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240523_133138_no_lease_zms.csv"
 str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240523_154006_no_lease_zms.csv" # threshold to 20
 str_micro_moments = str_data / "micro_moment_data" / "micro_moments_20240611.csv"
+str_charging_density = str_data / "charging_stations_output" / "charging_stations_extended.csv"
 
 if False:
     a = 1
@@ -161,7 +162,7 @@ def prepare_experian_data(makes_to_remove = None):
     return exp_mkt_data
 
 # We now prepare the RLP data, aiming to make it as similar as possible to the Experian data
-def prepare_rlp_data(df, makes_to_remove = None, mkt_def = "model_year", year_to_drop = None, zms_replaced_with = 0.001):
+def prepare_rlp_data(df, charging_data_path, makes_to_remove = None, mkt_def = "model_year", year_to_drop = None, zms_replaced_with = 0.001):
     # Drop relevant market years
     df = df.loc[~((df["model_year"]==2016) | (df["model_year"]==2017) | (df["model_year"]==2023))].reset_index(drop=True)
     if year_to_drop:
@@ -207,6 +208,11 @@ def prepare_rlp_data(df, makes_to_remove = None, mkt_def = "model_year", year_to
     # Remove makes
     if makes_to_remove:
         mkt_data = remove_makes(mkt_data, makes_to_remove)
+
+    # Add the charging data
+    charging_data = pd.read_csv(charging_data_path)
+    mkt_data = mkt_data.merge(charging_data[["market_ids", "charging_density_total", "charging_density_L2", "charging_density_DC"]], right_on = 'market_ids', left_on = 'market_ids', how = 'left')
+    assert(mkt_data["charging_density_total"].isnull().sum() == 0)
 
     return mkt_data
 
@@ -317,7 +323,7 @@ def run_rc_logit_model(rlp_df, subfolder, estimation_data_folder, agent_data = N
     rlp_df["broad_ev_nohybrid"] = rlp_df["electric"] + rlp_df["phev"]
 
     # Set up the formulation
-    X1_formulation_str = '0 + prices + dollar_per_mile + electric + phev + hybrid + diesel + wheelbase + log_hp_weight + doors + range_elec + C(make) + C(drivetype) + C(bodytype)'
+    X1_formulation_str = '0 + prices + dollar_per_mile + electric + phev + hybrid + diesel + wheelbase + log_hp_weight + doors + range_elec + electric:charging_density_total + C(make) + C(drivetype) + C(bodytype)'
     X1_formulation = pyblp.Formulation(X1_formulation_str)
     X2_formulation_str = '1+broad_ev_nohybrid'
     X2_formulation = pyblp.Formulation(X2_formulation_str)
@@ -475,82 +481,6 @@ def run_rc_logit_model(rlp_df, subfolder, estimation_data_folder, agent_data = N
         with open(subfolder / f'outputs_rand_coeffs_{rlp_market}_{date_time}.pkl', 'wb') as f:
             pickle.dump(results1, f)
 
-# Function to set up micro-moments
-if False:
-    def get_micro_moments(micro_statics_path, broad_ev_index):
-        """ 
-        Defining micro_dataset: 
-            Note that this is not an actual dataset, just metadata about the dataset that was used
-            to generate the observed values of the micro-moments. The key purpose of this is to model the probability
-            of observing each product, market, and indivdual type in the micro-dataset. 
-
-            Note that we represent the probability of observing each, market, product, and individual in the micro-dataset as follows:
-            P_A(n is in Nd | tn = t, jn = j, kn = k, in = i) = w_dijkt. 
-
-            This is the probability, under the aggregate data distribution, that a particular market, product, second choice, and individual
-            type is observed in the micro-dataset. 
-
-            We define the InMoment Dataset, for all years. We don't expect that second choice probabilities  will vary by year.
-            compute_weights:
-                returns w_dijk for each t in markets T. This is the probability of observing an agent of type i, first choice j, and second choice k,
-                    in the InMoment dataset, for that market t in T. 
-                compute_weights = lambda t, p, a: np.ones((a.size, 1 + p.size, p.size) returns an array of shape:
-                    (n_agents_t x (n_products_t + 1) x n_products_t) if we assume first choice could be outside option
-                    (n_agents_t x n_products_t x n_products_t) if we assume first choice cannot be outside option
-                for each market t.Each entry in this array is the probability of observing an agent of type i, first choice j, second choice k. 
-                We use uniform weights, this means that each agent, first, and second choice has equal probability of being observed in the micro-dataset.
-                CONDITIONAL on the aggregate data (i.e., we don't need to further adjust for the fact that some makes, models, etc. are more common than others)
-
-        Defining micro_parts:
-            compute_values:
-                This function computes micro-values v_pijkt: the micro-value for each individual, first, and second choice, for market t in T. 
-                The micro_part is in turn calculated by taking the expectation of these micro-values over individuals, first choices, and second choices.
-                The array returned by compute_values should be of the same shape as the weights returned by compute_weights of the dataset.
-
-        """
-        # Get micro-statistics
-        micro_statistics = pd.read_csv(micro_statics_path)
-        micro_statistic_val = micro_statistics.value.values[0]
-
-        # Set up micro_dataset
-        micro_dataset = pyblp.MicroDataset(
-            name = "InMoment", # Observations for all years, filtered for CT only
-            observations = 69528, # Total observations in 2018-2022 for New England
-            compute_weights=lambda t, p, a: np.ones((a.size, p.size, p.size))
-            #, market_ids = df.market_ids.unique().tolist() <- assume comes from all markets.
-        )
-        # Define the first MicroPart for first and second choices being an EV
-        sc_ev_part = pyblp.MicroPart(
-            name="E[broad_ev_1 * broad_ev_2]",
-            dataset=micro_dataset,
-            compute_values=lambda t, p, a: np.einsum('i,j,k->ijk',
-            a.demographics[:, 0], # I.e., unconditional on agent type - this is an expectation that is same for all agent types
-            p.X2[:, broad_ev_index],  # (n x 1) Operands - here tells us which of the first choices is broad EV
-            p.X2[:, broad_ev_index])  # (n x 1)Operands) - here tells us which of (second?) choices is broad EV
-        )
-        # Define the second MicroPart for first choice being an EV
-        ev_part = pyblp.MicroPart(
-            name="E[broad_ev_1]",
-            dataset=micro_dataset,
-            compute_values=lambda t, p, a: np.einsum('i,j,k->ijk',a.demographics[:, 0], p.X2[:, broad_ev_index], p.X2[:, 0])
-        )
-
-        # Define the anonymous functions for computing the ratio and its gradient
-        compute_ratio = lambda v: v[0] / v[1] 
-        compute_ratio_gradient = lambda v: [1 / v[1], -v[0] / v[1]**2]
-
-        # Define the micro-moments
-        micro_moments = [
-            pyblp.MicroMoment(name="E[broad_ev_2 | broad_ev_1]", 
-            value=float(micro_statistic_val),
-            parts=[sc_ev_part, ev_part],
-            compute_value=compute_ratio,
-            compute_gradient=compute_ratio_gradient,
-            )
-        ]
-
-        # Return
-        return micro_moments
     
 
 
@@ -561,7 +491,8 @@ exp_mkt_data = prepare_experian_data(makes_to_remove=["Polestar", "Smart", "Lotu
 
 # RLP data
 rlp_df = pd.read_csv(str_rlp_new)
-rlp_mkt_data = prepare_rlp_data(rlp_df, 
+rlp_mkt_data = prepare_rlp_data(rlp_df,
+                                str_charging_density, 
                                 makes_to_remove = ["Polestar", "Smart", "Lotus", "Scion", "Maserati"],
                                 mkt_def = rlp_market, year_to_drop = None, zms_replaced_with = zms_replaced_with)
 
@@ -571,8 +502,7 @@ agent_data = agent_data.loc[(agent_data["year"]>2017)&(agent_data["year"]!=2023)
 
 ############################################################################################################
 # Run the random coefficients logit model
-run_rc_logit_model(rlp_mkt_data, output_subfolder, estimation_data_subfolder, use_micro_moments = True)
-
+run_rc_logit_model(rlp_mkt_data, output_subfolder, estimation_data_subfolder, use_micro_moments = False)
 
 # Run the logit model
 # run_logit_model(exp_mkt_data, rlp_mkt_data, output_subfolder, estimation_data_subfolder, myear = "all_years")
