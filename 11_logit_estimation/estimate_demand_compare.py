@@ -305,9 +305,9 @@ def run_rc_logit_model(rlp_df, subfolder, estimation_data_folder, agent_data = N
 
     # Set up the estimation hyperparameters
     integ = 'monte_carlo'
-    n_agent = 5000
+    n_agent = 1000
     gmm_rounds = '2s'
-    sensitivity = 1e-8
+    sensitivity = 1e-4
 
     # Save the market data
     # exp_df.to_csv(estimation_data_folder / f'exp_mkt_data_{date_time}.csv',index = False)
@@ -397,14 +397,14 @@ def run_rc_logit_model(rlp_df, subfolder, estimation_data_folder, agent_data = N
         sc_ev_part = pyblp.MicroPart(
             name="E[broad_ev_1 * broad_ev_2]",
             dataset=micro_dataset,
-            compute_values = lambda t,p,a: np.einsum('i,j,k->ijk', unobserved_chars, p.X2[:, broad_ev_index], p.X2[:, broad_ev_index])  
+            compute_values = lambda t,p,a: np.einsum('i,j,k->ijk', np.ones(n_agent), p.X2[:, broad_ev_index], p.X2[:, broad_ev_index])  
         )
 
         # Define the second MicroPart for first choice being an EV
         ev_part = pyblp.MicroPart(
             name="E[broad_ev_1]",
             dataset=micro_dataset,
-            compute_values=lambda t,p,a: np.einsum('i,j,k->ijk',unobserved_chars, p.X2[:, broad_ev_index], p.X2[:, 0])
+            compute_values=lambda t,p,a: np.einsum('i,j,k->ijk',np.ones(n_agent), p.X2[:, broad_ev_index], p.X2[:, 0])
         )
 
         # Define the anonymous functions for computing the ratio and its gradient
@@ -444,7 +444,7 @@ def run_rc_logit_model(rlp_df, subfolder, estimation_data_folder, agent_data = N
 
     else:
         if use_micro_moments:
-            results1 = mc_problem.solve(sigma=sigma_guess,sigma_bounds=(sigma_lb,sigma_ub), optimization=optim,iteration=iter, method = gmm_rounds, micro_moments = micro_moments, W = w_mat)
+            results1 = mc_problem.solve(sigma=sigma_guess,sigma_bounds=(sigma_lb,sigma_ub), optimization=optim,iteration=iter, method = gmm_rounds, micro_moments = micro_moments)
         else:
             results1 = mc_problem.solve(sigma=sigma_guess,sigma_bounds=(sigma_lb,sigma_ub), optimization=optim,iteration=iter, method = gmm_rounds)
 

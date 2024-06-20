@@ -98,6 +98,59 @@ class Graph:
 
         return output
     
+    def BellmanFord(self, src, dest, print_it = True, return_path = False):
+        # Step 1: Initialize distances from src to all other vertices
+        self.total_cost = [float("Inf")] * self.V
+        self.boost = [0] * self.V
+        self.cost = [0] * self.V
+        self.prev = [None] * self.V
+ 
+        # Step 2: Relax all edges |V| - 1 times. A simple shortest
+        for _ in range(self.V - 1):
+
+            for u, v, w, b in self.graph:
+                alt_cost = self.cost[u] + w
+                alt_boost = self.boost[u] + b 
+                alt = self.objective(alt_cost, alt_boost)
+
+                if v == dest:
+                    output = True
+
+                if alt < self.total_cost[v]:
+                    self.total_cost[v] = alt
+                    self.cost[v] = alt_cost
+                    self.boost[v] = alt_boost
+                    self.prev[v] = u
+
+                if False:
+                    if self.dist[u] != float("Inf") and self.dist[u] + w < self.dist[v]:
+                        self.dist[v] = self.dist[u] + w
+                        self.prev[v] = u
+                    
+                    # Allows for possibility of equally distant paths
+                    elif self.dist[u] != float("Inf") and self.dist[u] + w == self.dist[v]:
+                        if self.prev[v] is None:
+                            self.prev[v] = u
+                        elif type(self.prev[v]) != list and self.prev[v] != u:
+                            self.prev[v] = sorted([self.prev[v], u])
+                        elif type(self.prev[v]) == list and u not in self.prev[v]:
+                            self.prev[v] = sorted(self.prev[v] + [u])
+                        
+        # Step 3: check for negative-weight cycles.
+        if False:
+            for u, v, w in self.graph:
+                if self.dist[u] != float("Inf") and self.dist[u] + w < self.dist[v]:
+                    print("Graph contains negative weight cycle")
+                    return
+        
+        if print_it:
+            self.printArr(src)
+
+        if return_path:
+            return self.getPath(dest, src), self.total_cost[dest], self.cost[dest], self.boost[dest]
+
+        return output
+
 
     # Function to get the path to a node
     def getPath(self, node, src, path = None):

@@ -85,6 +85,14 @@ class RoadNetwork():
         self.weight_matrix[45,55] = 4
 
     def add_more_chargers(self):
+        self.adjacency[22,23] = 1
+        self.adjacency[23,13]=1
+        self.weight_matrix[23,13] = 4
+
+        self.adjacency[5,6] = 1
+        self.adjacency[6,16]=1
+        self.weight_matrix[6,16] = 8
+
         self.adjacency[55,56] = 1
         self.adjacency[56,66] = 1
         self.weight_matrix[56,66] = 4
@@ -92,6 +100,11 @@ class RoadNetwork():
         self.adjacency[66,67]=1
         self.adjacency[67,77]=1
         self.weight_matrix[67,77] = 4
+
+        self.adjacency[71,72] = 1
+        self.adjacency[72,82] = 1
+        self.weight_matrix[72,82] = 4
+
 
     def load_graph(self, constraint, objective_type = "nonlinear", alpha1 = 0.2, alpha2 = 0.8):
         """Loads the graph with the adjacency data.
@@ -157,30 +170,41 @@ class RoadNetwork():
             for z in range(1, len(path)):
                 i, j = path[z-1], path[z]
 
-                # Get the next link to see if it is a charging link
-                try:
-                    i2, j2 = path[z], path[z+1]
-                except: # If we are at the last link, will throw an IndexError
-                    i2, j2 = None, None
-
                 x_vals = [i % self.size, j% self.size] 
                 y_vals = [i // self.size, j // self.size]
 
-                # If this is not a charging link
-                if (self.weight_matrix[i,j] ==1):
-                    # If it is the last link, plot it in red
-                    if not i2 or not j2:
+                if True:
+                    if self.weight_matrix[i,j] == 1:
                         ax.plot(x_vals, y_vals, 'o', linestyle = '-', color = 'red', linewidth = 3, zorder = 15)
                     else:
-                        # If the next link is not a charging link, plot the current link in red
-                        if self.weight_matrix[i2,j2] == 1:
+                        ax.plot(x_vals, y_vals, 'o', linestyle = '-', color = 'purple', linewidth = 3, zorder = 15)
+                
+
+                if False:
+                    # Get the next link to see if it is a charging link
+                    try:
+                        i2, j2 = path[z], path[z+1]
+                    except: # If we are at the last link, will throw an IndexError
+                        i2, j2 = None, None
+
+                    x_vals = [i % self.size, j% self.size] 
+                    y_vals = [i // self.size, j // self.size]
+
+                    # If this is not a charging link
+                    if (self.weight_matrix[i,j] ==1):
+                        # If it is the last link, plot it in red
+                        if not i2 or not j2:
                             ax.plot(x_vals, y_vals, 'o', linestyle = '-', color = 'red', linewidth = 3, zorder = 15)
-                        # If the next link is a charging link, plot the current link in purple
-                        else: 
-                            ax.plot(x_vals, y_vals, 'o', linestyle = '-', color = 'purple', linewidth = 3, zorder = 15)
-                # If the current link is a charging link, plot it in purple
-                else:
-                    ax.plot(x_vals, y_vals, 'o', linestyle = '-', color = 'purple', linewidth = 3, zorder = 15)
+                        else:
+                            # If the next link is not a charging link, plot the current link in red
+                            if self.weight_matrix[i2,j2] == 1:
+                                ax.plot(x_vals, y_vals, 'o', linestyle = '-', color = 'red', linewidth = 3, zorder = 15)
+                            # If the next link is a charging link, plot the current link in purple
+                            else: 
+                                ax.plot(x_vals, y_vals, 'o', linestyle = '-', color = 'purple', linewidth = 3, zorder = 15)
+                    # If the current link is a charging link, plot it in purple
+                    else:
+                        ax.plot(x_vals, y_vals, 'o', linestyle = '-', color = 'purple', linewidth = 3, zorder = 15)
             fig.suptitle(f"Path: {','.join([str(x) for x in path])}", y = 0.90)
             fig.text(0.5, 0.05, f"Total cost: {self.path_total_cost:.2f}, Cost: {self.path_cost}, Boost: {self.path_boost}", ha = 'center', fontsize = 12)
             if self.objective_type == "nonlinear":
@@ -196,7 +220,7 @@ class RoadNetwork():
 
 if __name__ == '__main__':
     r = RoadNetwork(10)
-    r.generate_adjacency(diag = False, nondiag_sparse = False)
+    r.generate_adjacency(diag = False, nondiag_sparse = True)
     r.add_chargers()
 
     # Charges twice but not all four times
@@ -204,11 +228,10 @@ if __name__ == '__main__':
         r.add_more_chargers()
         # r.plot_network()
     if True:
-        r.load_graph(100, "linear", 0.3, 0.7)
-        r.get_path(0,75)
+        r.load_graph(100, "nonlinear", 0.05, 0.95)
+        r.get_path(0,99)
         r.plot_network(plot_path = True, path = r.path)
 
 
-    # r.plot_network()
 
     
