@@ -211,8 +211,12 @@ def prepare_rlp_data(df, charging_data_path, makes_to_remove = None, mkt_def = "
 
     # Add the charging data
     charging_data = pd.read_csv(charging_data_path)
-    mkt_data = mkt_data.merge(charging_data[["market_ids", "charging_density_total", "charging_density_L2", "charging_density_DC"]], right_on = 'market_ids', left_on = 'market_ids', how = 'left')
+    charging_density_cols = ['charging_density_total', 'charging_density_L2', 'charging_density_DC']
+    mkt_data = mkt_data.merge(charging_data[["market_ids"]+charging_density_cols], right_on = 'market_ids', left_on = 'market_ids', how = 'left')
     assert(mkt_data["charging_density_total"].isnull().sum() == 0)
+    # Center the charging_density_cols around their respective means
+    for col in charging_density_cols:
+        mkt_data[col] = mkt_data[col] - mkt_data[col].mean()
 
     return mkt_data
 
