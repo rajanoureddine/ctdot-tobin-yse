@@ -141,17 +141,17 @@ def unzip_and_get_CT(footfall_output_path, processed_output_path):
     ct_data.to_csv(processed_output_path / "footfall_CT_2020-01-07.csv")
 
 ############################################################################################################
-if True:
+if False:
     unzip_and_get_CT(footfall_output_path, processed_output_path)
 
 ############################################################################################################
-if False: # On clusters just want to download
+if True: # On clusters just want to download
     # Load the CT data
     ct_data = pd.read_csv(processed_output_path / "footfall_CT_2020-01-07.csv")
 
     # Remove duplicates based on the PLACEKEY column, recording how many we drop
-    print(f"Dropping {ct_data.duplicated(subset='PLACEKEY').sum()} duplicates")
-    ct_data = ct_data.drop_duplicates(subset='PLACEKEY')
+    # print(f"Dropping {ct_data.duplicated(subset='PLACEKEY').sum()} duplicates")
+    # ct_data = ct_data.drop_duplicates(subset='PLACEKEY')
 
     # Get the number of unique placekeys
     print(f"Number of unique placekeys: {ct_data['PLACEKEY'].nunique()}")
