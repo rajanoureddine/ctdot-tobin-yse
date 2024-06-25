@@ -333,7 +333,7 @@ def run_rc_logit_model(rlp_df, subfolder, estimation_data_folder, agent_data = N
     rlp_df["broad_ev_nohybrid"] = rlp_df["electric"] + rlp_df["phev"]
 
     # Set up the formulation
-    X1_formulation_str = '0 + prices + dollar_per_mile + electric + phev + hybrid + diesel + wheelbase + log_hp_weight + doors + range_elec + electric:charging_density_total + pop_density + C(make) + C(drivetype) + C(bodytype)'
+    X1_formulation_str = '0 + prices + dollar_per_mile + electric + phev + hybrid + diesel + wheelbase + log_hp_weight + doors + range_elec + electric:charging_density_L2 + C(make) + C(drivetype) + C(bodytype)'
     X1_formulation = pyblp.Formulation(X1_formulation_str)
     X2_formulation_str = '1+broad_ev_nohybrid'
     X2_formulation = pyblp.Formulation(X2_formulation_str)
