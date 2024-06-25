@@ -13,6 +13,7 @@ from scipy.optimize import minimize
 import platform
 from time import sleep
 import matplotlib.pyplot as plt
+from IPython.display import display
 
 from linearmodels.iv import IV2SLS # this is to check IV results
 
@@ -27,18 +28,6 @@ warnings.filterwarnings("ignore")
 pyblp.options.verbose = True
 
 ############################################################################################################
-# Settings
-version = "CONNECTICUT"
-model = 'logit'
-integ = 'gauss'
-dynamic = False
-incl_2021 = True
-# rlp_market = 'model_year'
-rlp_market ='county_model_year'
-date_time = time.strftime("%m%d-%H%M")
-zms_replaced_with = 0.01
-
-############################################################################################################
 # Set up main paths and directories
 if platform.platform()[0:5] == 'macOS':
     on_cluster = False
@@ -49,46 +38,59 @@ elif platform.platform()[0:5] == 'Linux':
     cd = pathlib.Path().resolve()
     str_project = cd.parent.parent / "rn_home" / "data"
 
-# Set up sub-directories
+# Set up sub-directories to get the data from
 str_data = str_project / "tobin_working_data"
-str_rlp = str_data / "rlpolk_data"
-str_sales_vin_characteristic = str_rlp / "rlp_with_dollar_per_mile.csv"
-output_folder = str_project / str_data / "outputs"
-estimation_data_dir = str_data / "estimation_data_test" / "estimation_data_county_model_year_0601-0700" 
-estimation_data = estimation_data_dir /"rc_mkt_data_county_model_year_0601-0700.csv"
+estimation_data_dir = str_data / "estimation_data_test" / "estimation_data_county_model_year_0601-0700" # Data for the stimation
+# results_pkl = str_data / "outputs" / "outputs_county_model_year_0601-0700"  /"outputs_rand_coeffs_county_model_year_0601-0700.pkl"
+results_pkl = str_data / "outputs" / "outputs_county_model_year_0619-1033"  /"outputs_rand_coeffs_county_model_year_0619-1033.pkl"
+output_folder = str_data / "post_estimation_outputs"
 
 
 ############################################################################################################
 # Set output dir
-output_dir = output_folder / "outputs_county_model_year_0601-0700"
-results_pkl = output_dir / "outputs_rand_coeffs_county_model_year_0601-0700.pkl"
-estimation_data = pd.read_csv(estimation_data)
+estimation_data = pd.read_csv(estimation_data_dir /"rc_mkt_data_county_model_year_0601-0700.csv")
 
 # Unpickle results
 with open(results_pkl, "rb") as f:
     results = pickle.load(f)
 
-# Get NHV 2022
-nhv_2022 = estimation_data.market_ids == "NEW HAVEN_2022"
-ev_indexes = estimation_data[nhv_2022].electric == 1
-nev_indexes = estimation_data[nhv_2022].electric == 0
+def get_elasticities_market(results, market_id, variable = None, further_indices = None):
+    """
+    This function computes elasticities for a given market and variable
+    """
+    # Get elasticities
+    if not variable:
+        elasticities = results.compute_elasticities()
+    else:
+        elasticities = results.compute_elasticities(variable)
+    
+    # Get market indices
+    market_indexes = estimation_data.market_ids == market_id
 
-# Get all elasticities
-elasticities = results.compute_elasticities()
-nhv_elasticities = elasticities[nhv_2022]
-assert np.size(nhv_elasticities) == 315*315
+    # Get elasticities for the market
+    market_elasticities = elasticities[market_indexes]
 
-if False:
+    # If further indices
+    indices_out = []
+    for index in further_indices:
+        indices_out.append(index(estimation_data[market_indexes]))
+
+    return market_elasticities, indices_out
+
+def hist_plot_elasticities(elasticities_matrix, indices = None, labels = None, plot_mean_line = True):
     # Plot
     fig, ax = plt.subplots(nrows = 1, ncols = 1, figsize = (10, 6))
-    ax.hist(np.diag(nhv_elasticities)[ev_indexes], bins = 100, color = 'blue', label = "EVs", zorder = 2)
-    ax.hist(np.diag(nhv_elasticities)[nev_indexes], bins = 100, color = 'red', label = "Non-EVs", zorder = 1)
-
-    # Add vertical line at mean of EVs and non-EVs
-    mean_ev = np.mean(np.diag(nhv_elasticities)[ev_indexes])
-    mean_nev = np.mean(np.diag(nhv_elasticities)[nev_indexes])
-    ax.axvline(x = mean_ev, color = 'blue', linestyle = '--', label = f"Mean EV: {mean_ev:.2f}")
-    ax.axvline(x = mean_nev, color = 'red', linestyle = '--', label = f"Mean Non-EV: {mean_nev:.2f}")
+    if indices:
+        for i, index in enumerate(indices):
+            ax.hist(np.diag(elasticities_matrix)[index], bins = 100, label = labels[i], alpha = 0.5)
+            if plot_mean_line:
+                mean_index = np.mean(np.diag(elasticities_matrix)[index])
+                ax.axvline(x = mean_index, linestyle = '--', label = f"Mean {labels[i]}: {mean_index:.2f}")
+    else:
+        ax.hist(np.diag(elasticities_matrix), bins = 100)
+        if plot_mean_line:
+            mean_all = np.mean(np.diag(elasticities_matrix))
+            ax.axvline(x = mean_all, linestyle = '--', label = f"Mean All: {mean_all:.2f}")
 
     # Name axes
     ax.set_xlabel("Own Price Elasticity")
@@ -102,54 +104,35 @@ if False:
 
     plt.show()
 
-############################################################################################################
-# Get elasticities for dollars per mile
-# Get all elasticities
-elasticities_dpm = results.compute_elasticities("dollar_per_mile")
-nhv_elasticities_dpm = elasticities_dpm[nhv_2022]
 
-# Plot
-fig, ax = plt.subplots(nrows = 1, ncols = 1, figsize = (10, 6))
-ax.hist(np.diag(nhv_elasticities_dpm), bins = 100, color = 'blue', label = "All", zorder = 2)
 
-# Add vertical line at mean of EVs and non-EVs
-mean_all = np.mean(np.diag(nhv_elasticities_dpm))
 
-ax.axvline(x = mean_all, color = 'blue', linestyle = '--', label = f"Mean All: {mean_all:.2f}")
-
-# Name axes
-ax.set_xlabel("Own Price Elasticity")
-ax.set_ylabel("Frequency")
-
-# Add legend
-ax.legend()
-
-# Add title
-ax.set_title("Distribution of Own Price Elasticities for New Haven 2022 - Dollars per Mile")
-
-plt.show()
 
 ############################################################################################################
-# Plot DPM elasticities for EVs and non-EVs
-fig, ax = plt.subplots(nrows = 1, ncols = 1, figsize = (10, 6))
-ax.hist(np.diag(nhv_elasticities_dpm)[ev_indexes], bins = 50, color = 'blue', label = "EVs", zorder = 2)
-ax.hist(np.diag(nhv_elasticities_dpm)[nev_indexes], bins = 50, color = 'red', label = "Non-EVs", zorder = 1)
+# Get elasticities for New Haven, along with indices for EVs and non-EVs, and plot
+# nhv_elasticities, indexes = get_elasticities_market(results, "NEW HAVEN_2022", variable = None, further_indices= [lambda x: x.electric == 1, lambda x: x.electric == 0])
+# hist_plot_elasticities(nhv_elasticities, [indexes[0], indexes[1]], ["EVs", "Non-EVs"])
 
-# Add vertical line at mean of EVs and non-EVs
-mean_ev_dpm = np.mean(np.diag(nhv_elasticities_dpm)[ev_indexes])
-mean_nev_dpm = np.mean(np.diag(nhv_elasticities_dpm)[nev_indexes])
+# Get elasticities for New Haven, along with indices for EVs and non-EVs, for dollars per mile
+# nhv_elasticities_dpm, indexes_dpm = get_elasticities_market(results, "NEW HAVEN_2022", variable = "dollar_per_mile", further_indices= [lambda x: x.electric == 1, lambda x: x.electric == 0])
+# hist_plot_elasticities(nhv_elasticities_dpm, [indexes_dpm[0], indexes_dpm[1]], ["EVs", "Non-EVs"])
 
-ax.axvline(x = mean_ev_dpm, color = 'blue', linestyle = '--', label = f"Mean EV: {mean_ev_dpm:.2f}")
-ax.axvline(x = mean_nev_dpm, color = 'red', linestyle = '--', label = f"Mean Non-EV: {mean_nev_dpm:.2f}")
+# Now we want to extract specific models.
+makes_models_trims = [["Tesla", "Model-3", "Long Range"], ["Tesla", "Model-Y", "Long Range"], ["Tesla", "Model-S",  "Base"],
+                       ["Acura", "Mdx", "SH-AWD w/Tech"], ["Chevrolet", "Bolt-Euv", "Premier"],
+                        ["Toyota", "Rav4-Prime", "SE"], ["Ram", "Ram-Pickup-1500", "Big Horn"], ["Toyota", "Tacoma", "SR V6"],
+                        ["Jeep", "Wrangler-Unlimited", "Sahara 4xe"]]
+funs = [lambda x, y=y: ((x.make==y[0])&(x.model==y[1])&(x.trim==y[2])) for y in makes_models_trims]
+nhv_elasticities, make_indices = get_elasticities_market(results, "NEW HAVEN_2022", variable = None, further_indices= funs)
 
-# Name axes
-ax.set_xlabel("Own Price Elasticity")
-ax.set_ylabel("Frequency")
+# Make into table
+desired_indices = np.reshape(np.where(np.sum(make_indices, axis = 0)), -1)
+elasticities = pd.DataFrame(nhv_elasticities, columns = np.arange(0, len(nhv_elasticities)))
+mat = elasticities.loc[desired_indices, desired_indices]
+mat.index = [makes_modes_trims[0]+" "+makes_modes_trims[1]+" "+makes_modes_trims[2] for makes_modes_trims in makes_models_trims]
+mat.columns = mat.index
 
-# Add legend
-ax.legend()
+print(mat.to_latex(float_format="%.4f"))
 
-# Add title
-ax.set_title("Distribution of Own Price Elasticities for New Haven 2022 - Dollars per Mile")
-
-plt.show()
+# print(mat)
+# print(mat.to_latex())
