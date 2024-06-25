@@ -64,6 +64,7 @@ estimation_test = str_data / "estimation_data_test"
 str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240523_154006_no_lease_zms.csv" # threshold to 20
 str_micro_moments = str_data / "micro_moment_data" / "micro_moments_20240611.csv"
 str_charging_density = str_data / "charging_stations_output" / "charging_stations_extended.csv"
+str_pop_density = str_data / "other_data" / "population_by_year_counties.csv"
 
 if False:
     a = 1
@@ -162,7 +163,7 @@ def prepare_experian_data(makes_to_remove = None):
     return exp_mkt_data
 
 # We now prepare the RLP data, aiming to make it as similar as possible to the Experian data
-def prepare_rlp_data(df, charging_data_path, makes_to_remove = None, mkt_def = "model_year", year_to_drop = None, zms_replaced_with = 0.001):
+def prepare_rlp_data(df, pop_density_path, charging_data_path, makes_to_remove = None, mkt_def = "model_year", year_to_drop = None, zms_replaced_with = 0.001):
     # Drop relevant market years
     df = df.loc[~((df["model_year"]==2016) | (df["model_year"]==2017) | (df["model_year"]==2023))].reset_index(drop=True)
     if year_to_drop:
@@ -217,6 +218,11 @@ def prepare_rlp_data(df, charging_data_path, makes_to_remove = None, mkt_def = "
     # Center the charging_density_cols around their respective means
     for col in charging_density_cols:
         mkt_data[col] = mkt_data[col] - mkt_data[col].mean()
+
+    # Add the population density
+    pop_density = pd.read_csv(pop_density_path)
+    mkt_data = mkt_data.merge(pop_density[["market_ids", "pop_density"]], on =  "market_ids", how = 'left')
+    assert(mkt_data["pop_density"].isnull().sum() == 0)
 
     return mkt_data
 
@@ -327,7 +333,7 @@ def run_rc_logit_model(rlp_df, subfolder, estimation_data_folder, agent_data = N
     rlp_df["broad_ev_nohybrid"] = rlp_df["electric"] + rlp_df["phev"]
 
     # Set up the formulation
-    X1_formulation_str = '0 + prices + dollar_per_mile + electric + phev + hybrid + diesel + wheelbase + log_hp_weight + doors + range_elec + electric:charging_density_total + C(make) + C(drivetype) + C(bodytype)'
+    X1_formulation_str = '0 + prices + dollar_per_mile + electric + phev + hybrid + diesel + wheelbase + log_hp_weight + doors + range_elec + electric:charging_density_total + pop_density + C(make) + C(drivetype) + C(bodytype)'
     X1_formulation = pyblp.Formulation(X1_formulation_str)
     X2_formulation_str = '1+broad_ev_nohybrid'
     X2_formulation = pyblp.Formulation(X2_formulation_str)
@@ -494,8 +500,10 @@ def run_rc_logit_model(rlp_df, subfolder, estimation_data_folder, agent_data = N
 exp_mkt_data = prepare_experian_data(makes_to_remove=["Polestar", "Smart", "Lotus", "Scion", "Maserati"])
 
 # RLP data
+logging.log(logging.INFO, f"Reading in RLP data from {str_rlp_new}")
 rlp_df = pd.read_csv(str_rlp_new)
 rlp_mkt_data = prepare_rlp_data(rlp_df,
+                                str_pop_density, # Pop density
                                 str_charging_density, 
                                 makes_to_remove = ["Polestar", "Smart", "Lotus", "Scion", "Maserati"],
                                 mkt_def = rlp_market, year_to_drop = None, zms_replaced_with = zms_replaced_with)
