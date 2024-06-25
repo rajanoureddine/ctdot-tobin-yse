@@ -20,6 +20,10 @@ import platform
 import glob
 import gzip
 
+# Silence warnings
+import warnings
+
+warnings.filterwarnings("ignore")
 ############################################################################################################
 # Set the paths
 if platform.platform()[0:5] == 'macOS':
@@ -89,7 +93,19 @@ def extract_ct_data(input_path, partitions, output_path, output_name, save = Fal
 ############################################################################################################
 if False:
     download_advan_data("https://app.deweydata.io/external-api/v3/products/5acc9f39-1ca6-4535-b3ff-38f6b9baf85e/files",
-                        "2020-07-01",
+                        "2021-07-01",
+                        footfall_output_path)
+
+    download_advan_data("https://app.deweydata.io/external-api/v3/products/5acc9f39-1ca6-4535-b3ff-38f6b9baf85e/files",
+                        "2022-07-01",
+                        footfall_output_path)
+
+    download_advan_data("https://app.deweydata.io/external-api/v3/products/5acc9f39-1ca6-4535-b3ff-38f6b9baf85e/files",
+                        "2023-07-01",
+                        footfall_output_path)
+    
+    download_advan_data("https://app.deweydata.io/external-api/v3/products/5acc9f39-1ca6-4535-b3ff-38f6b9baf85e/files",
+                        "2024-01-01",
                         footfall_output_path)
 
 ############################################################################################################
@@ -129,27 +145,28 @@ if False:
     unzip_and_get_CT(footfall_output_path, processed_output_path)
 
 ############################################################################################################
-# Load the CT data
-ct_data = pd.read_csv(processed_output_path / "footfall_CT_2020-01-07.csv")
+if True: # On clusters just want to download
+    # Load the CT data
+    ct_data = pd.read_csv(processed_output_path / "footfall_CT_2020-01-07.csv")
 
-# Remove duplicates based on the PLACEKEY column, recording how many we drop
-print(f"Dropping {ct_data.duplicated(subset='PLACEKEY').sum()} duplicates")
-ct_data = ct_data.drop_duplicates(subset='PLACEKEY')
+    # Remove duplicates based on the PLACEKEY column, recording how many we drop
+    # print(f"Dropping {ct_data.duplicated(subset='PLACEKEY').sum()} duplicates")
+    # ct_data = ct_data.drop_duplicates(subset='PLACEKEY')
 
-# Get the number of unique placekeys
-print(f"Number of unique placekeys: {ct_data['PLACEKEY'].nunique()}")
+    # Get the number of unique placekeys
+    print(f"Number of unique placekeys: {ct_data['PLACEKEY'].nunique()}")
 
-# Print the top 50 SUB_CATEGORY labels by sum of RAW_VISIT_COUNTS
-print(ct_data.groupby('SUB_CATEGORY')['RAW_VISIT_COUNTS'].sum().sort_values(ascending=False).head(50))
+    # Print the top 50 SUB_CATEGORY labels by sum of RAW_VISIT_COUNTS
+    print(ct_data.groupby('SUB_CATEGORY')['RAW_VISIT_COUNTS'].sum().sort_values(ascending=False).head(50))
 
-# Print all rows with "ChargePoint" in the LOCATION_NAME
-# print(ct_data[ct_data['LOCATION_NAME'].str.contains("ChargePoint")])
+    # Print all rows with "ChargePoint" in the LOCATION_NAME
+    # print(ct_data[ct_data['LOCATION_NAME'].str.contains("ChargePoint")])
 
-# Create a mask to find charging stations
-mask = ct_data['CATEGORY_TAGS'].astype(str).str.contains("Fuel")
-mask = mask | ct_data["LOCATION_NAME"].str.lower().str.contains("charging") | ct_data["LOCATION_NAME"].str.lower().str.contains("charge")
-mask = mask | (ct_data["TOP_CATEGORY"].str.contains("Gasoline Stations"))
+    # Create a mask to find charging stations
+    mask = ct_data['CATEGORY_TAGS'].astype(str).str.contains("Fuel")
+    mask = mask | ct_data["LOCATION_NAME"].str.lower().str.contains("charging") | ct_data["LOCATION_NAME"].str.lower().str.contains("charge")
+    mask = mask | (ct_data["TOP_CATEGORY"].str.contains("Gasoline Stations"))
 
-# Get these rows and save them to the output path
-charging_stations = ct_data[mask]
-charging_stations.to_csv(processed_output_path / "potential_charging_stations.csv")
+    # Get these rows and save them to the output path
+    charging_stations = ct_data[mask]
+    charging_stations.to_csv(processed_output_path / "potential_charging_stations.csv")
