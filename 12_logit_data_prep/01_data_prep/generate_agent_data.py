@@ -123,7 +123,11 @@ def generate_sample(df, N_obs, alt_2022 = False):
 
     result = result.rename(columns = {"hhincome" : "income", "hhincome_categories":"income_category"})
 
-    return result[['state', 'countyfip', "year", 'model_year', 'market_ids', 'income', 'income_category', 'single_fam', 'urban', 'college_grad', 'weights']]
+    # Turn income categories into dummies
+    income_cat_dummies = pd.get_dummies(result[["income_category"]], prefix = "hh_income", dtype = int)
+    result = pd.concat([result, income_cat_dummies], axis = 1)
+
+    return result[['state', 'countyfip', "year", 'model_year', 'market_ids', 'income']+income_cat_dummies.columns.tolist()+['single_fam', 'urban', 'college_grad', 'weights']]
 
 # We generate for all years, and then for 2021 (that we use to replace 2022 for which we have no data)
 samples = generate_sample(dt_ipums, 2000)
