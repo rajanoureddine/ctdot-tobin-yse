@@ -29,9 +29,6 @@ county_fips = {1:'FAIRFIELD',
                15:'WINDHAM'}
 
 ####################################################################################################
-# Set parameters
-N_obs = 5000
-
 # Read in IPUMS data and fix CPI income
 dt_ipums = pd.read_csv(ipums_dir)
 
@@ -39,17 +36,40 @@ dt_ipums = pd.read_csv(ipums_dir)
 dt_ipums = dt_ipums.rename(columns = {"stateicp":"state"})
 
 # Fix incomes
-dt_ipums = dt_ipums.loc[(dt_ipums["hhincome"]!=9999909)&(dt_ipums["hhincome"]>0)]
+# Drop invalid observations
+dt_ipums = dt_ipums.loc[(dt_ipums["hhincome"]!='Non-monetary')]
+dt_ipums = dt_ipums.loc[(dt_ipums["hhincome_cpiu_2010"]!='Non-monetary')]
+dt_ipums["hhincome_cpiu_2010"] = dt_ipums["hhincome_cpiu_2010"].astype(int)
+dt_ipums = dt_ipums.loc[(dt_ipums["hhincome"]<9999000)&(dt_ipums["hhincome"]>5000)]
+dt_ipums = dt_ipums.loc[(dt_ipums["hhincome_cpiu_2010"]<9999000)&(dt_ipums["hhincome_cpiu_2010"]>5000)]
+
+# Get CPI-adjusted numbers
 dt_ipums = dt_ipums.rename(columns = {'hhincome':'hhincome_old'})
 dt_ipums = dt_ipums.rename(columns = {'hhincome_cpiu_2010': 'hhincome'})
-dt_ipums = dt_ipums.loc[(dt_ipums["hhincome"]!='Non-monetary')]
+
+# Get income in thousands
 dt_ipums['hhincome'] = dt_ipums['hhincome'].astype(int) / 1000
 dt_ipums = dt_ipums[dt_ipums.hhincome > 1]
+
+# Now categorize the incomes to align with micro_moments
+def categorize_incomes(x):
+    if x < 10:
+        return np.nan # Assume these are errors
+    elif x < 85:
+        return 'low'
+    elif x< 200:
+        return 'medium'
+    elif x<5000:
+        return 'high'
+    else:
+        return np.nan
+
+# Categorise the income categories
+dt_ipums.loc[:, "hhincome_categories"] = dt_ipums.loc[:, "hhincome"].apply(categorize_incomes)
 
 # Get county names
 dt_ipums['county_name'] = dt_ipums['countyfip'].map(county_fips)
 dt_ipums = dt_ipums.dropna(subset=['county_name']) # This also drops 2022
-
 
 if False:
     # CPI Calculations - we base to 2010
@@ -101,14 +121,16 @@ def generate_sample(df, N_obs, alt_2022 = False):
 
     result = pd.concat(samples, ignore_index=True)
 
-    result = result.rename(columns = {"hhincome" : "income"})
+    result = result.rename(columns = {"hhincome" : "income", "hhincome_categories":"income_category"})
 
-    return result[['state', 'countyfip', "year", 'model_year', 'market_ids', 'income', 'single_fam', 'urban', 'college_grad', 'weights']]
+    return result[['state', 'countyfip', "year", 'model_year', 'market_ids', 'income', 'income_category', 'single_fam', 'urban', 'college_grad', 'weights']]
 
-
+# We generate for all years, and then for 2021 (that we use to replace 2022 for which we have no data)
 samples = generate_sample(dt_ipums, 2000)
 samples_2022 = generate_sample(dt_ipums.loc[dt_ipums["year"]==2021], 2000, alt_2022=True)
 samples = pd.concat([samples, samples_2022], ignore_index=True)
+
+
 samples.to_csv(f"{str_dir}/ipums_data/agent_data_processed_2000.csv", index=False)
 
 if False:
