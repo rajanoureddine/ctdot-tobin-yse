@@ -14,6 +14,7 @@ import platform
 from time import sleep
 import matplotlib.pyplot as plt
 from IPython.display import display
+import re 
 
 from linearmodels.iv import IV2SLS # this is to check IV results
 
@@ -49,10 +50,38 @@ output_folder = str_data / "post_estimation_outputs"
 ############################################################################################################
 # Set output dir
 estimation_data = pd.read_csv(estimation_data_dir /"rc_mkt_data_county_model_year_0601-0700.csv")
+estimation_data["column header"] = estimation_data["make"]+" "+estimation_data["model"]+" "+estimation_data["trim"]
+
+# For each unique make, model, trim, create dummy columns showing which years it is present in
+estimation_data["code"] = estimation_data["make"]+"_"+estimation_data["model"]+"_"+estimation_data["trim"]
+unique_codes = estimation_data["code"].unique()
+for code in unique_codes:
+    years = estimation_data.loc[estimation_data["code"] == code, "model_year"].unique()
+    for year in years:
+        estimation_data.loc[estimation_data.code == code, year] = 1
+
 
 # Unpickle results
 with open(results_pkl, "rb") as f:
     results = pickle.load(f)
+
+def get_indices_within_market(estimation_data, market_id):
+    estimation_data["code"] = estimation_data["make"]+"_"+estimation_data["model"]+"_"+estimation_data["trim"]+"_"+estimation_data["fuel"]+"_"+estimation_data["range_elec"].astype(str)
+    data_2022 = estimation_data.loc[estimation_data["market_ids"] == "NEW HAVEN_2022", ["code"]].reset_index(drop = True)
+
+    specified_mkt = estimation_data.loc[estimation_data["market_ids"] == market_id, ["code"]].reset_index(drop=True)
+
+    # Now, for each code in the specified market, find the index in the 2022 market
+    indices = []
+    for ind, row in specified_mkt.iterrows():
+        try:
+            if len(data_2022[data_2022["code"] == row["code"]].index) > 1:
+                print("a")
+            indices = indices + data_2022[data_2022["code"] == row["code"]].index.tolist()
+        except:
+            pass
+    
+    return indices
 
 def get_elasticities_market(results, market_id, variable = None, further_indices = None):
     """
@@ -118,21 +147,87 @@ def hist_plot_elasticities(elasticities_matrix, indices = None, labels = None, p
 # hist_plot_elasticities(nhv_elasticities_dpm, [indexes_dpm[0], indexes_dpm[1]], ["EVs", "Non-EVs"])
 
 # Now we want to extract specific models.
-makes_models_trims = [["Tesla", "Model-3", "Long Range"], ["Tesla", "Model-Y", "Long Range"], ["Tesla", "Model-S",  "Base"],
-                       ["Acura", "Mdx", "SH-AWD w/Tech"], ["Chevrolet", "Bolt-Euv", "Premier"],
-                        ["Toyota", "Rav4-Prime", "SE"], ["Ram", "Ram-Pickup-1500", "Big Horn"], ["Toyota", "Tacoma", "SR V6"],
-                        ["Jeep", "Wrangler-Unlimited", "Sahara 4xe"]]
-funs = [lambda x, y=y: ((x.make==y[0])&(x.model==y[1])&(x.trim==y[2])) for y in makes_models_trims]
-nhv_elasticities, make_indices = get_elasticities_market(results, "NEW HAVEN_2022", variable = None, further_indices= funs)
+if False:
+    makes_models_trims = [["Tesla", "Model-3", "Long Range"], ["Tesla", "Model-Y", "Long Range"],["Chevrolet", "Bolt-Euv", "Premier"],
+                        ["Acura", "Mdx", "SH-AWD w/Tech"], ["Toyota", "Rav4-Prime", "SE"], ["Ram", "Ram-Pickup-1500", "Big Horn"], 
+                        ["Toyota", "Tacoma", "SR V6"], ["Jeep", "Wrangler-Unlimited", "Sahara 4xe"]]
 
-# Make into table
-desired_indices = np.reshape(np.where(np.sum(make_indices, axis = 0)), -1)
-elasticities = pd.DataFrame(nhv_elasticities, columns = np.arange(0, len(nhv_elasticities)))
-mat = elasticities.loc[desired_indices, desired_indices]
-mat.index = [makes_modes_trims[0]+" "+makes_modes_trims[1]+" "+makes_modes_trims[2] for makes_modes_trims in makes_models_trims]
-mat.columns = mat.index
+    funs = [lambda x, y=y: ((x.make==y[0])&(x.model==y[1])&(x.trim==y[2])) for y in makes_models_trims]
+    nhv_elasticities, make_indices = get_elasticities_market(results, "NEW HAVEN_2022", variable = None, further_indices= funs)
 
-print(mat.to_latex(float_format="%.4f"))
+    # Make into table
+    desired_indices = np.reshape(np.where(np.sum(make_indices, axis = 0)), -1)
+    elasticities = pd.DataFrame(nhv_elasticities, columns = np.arange(0, len(nhv_elasticities)))
+    mat = elasticities.loc[desired_indices, desired_indices]
+    mat.index = [makes_modes_trims[0]+" "+makes_modes_trims[1]+" "+makes_modes_trims[2] for makes_modes_trims in makes_models_trims]
+    mat.columns = mat.index
+    mat=mat.reset_index().rename(columns = {"index": "Model"})
+    mat.columns = ["\multicolumn{1}{m{2cm}}{\centering "+str(x) + "}" for x in mat.columns]
 
-# print(mat)
-# print(mat.to_latex())
+    lat_str = mat.to_latex(index = False, 
+                    float_format="%.4f",
+                    formatters = {mat.columns[0]:lambda x: "\multicolumn{1}{m{2.5cm}}{\centering "+x+"}"})
+
+    lat_str = re.sub(r'(toprule|midrule|bottomrule)', r'hline', lat_str)
+    lat_str = re.sub(r'\\\\', r'\\\\[0.4cm]', lat_str)
+    print(lat_str)
+
+
+############################################################################################################
+# Get elasticities for another market using the new functionality we've discovered
+if False:
+    elasticities_21 = results.compute_elasticities("prices", market_id = "NEW HAVEN_2021")
+    elasticities_21 = pd.DataFrame(elasticities_21, columns = np.arange(0, len(elasticities_21)))
+    estimation_data["column header"] = estimation_data["make"]+" "+estimation_data["model"]+" "+estimation_data["trim"]
+    elasticities_21.index = estimation_data.loc[estimation_data["market_ids"] == "NEW HAVEN_2021", "column header"]
+    elasticities_21.columns = elasticities_21.index
+
+    wanted_cols = ["Tesla Model-3 Long Range", "Tesla Model-Y Long Range", "Chevrolet Bolt-Euv Premier", "Acura Mdx SH-AWD w/Tech", "Toyota Rav4-Prime SE", "Ram Ram-Pickup-1500 Big Horn", "Toyota Tacoma SR V6", "Jeep Wrangler-Unlimited Sahara 4xe"]
+
+    elasticities_21 = elasticities_21.loc[wanted_cols, wanted_cols]
+
+
+    mat = elasticities_21
+    mat=mat.reset_index().rename(columns = {"index": "Model"})
+    mat.columns = ["\multicolumn{1}{m{2cm}}{\centering "+str(x) + "}" for x in mat.columns]
+    lat_str = mat.to_latex(index = False,
+                        float_format="%.4f",
+                        formatters = {mat.columns[0]:lambda x: "\multicolumn{1}{m{2.5cm}}{\centering "+x+"}"})
+    lat_str = re.sub(r'(toprule|midrule|bottomrule)', r'hline', lat_str)
+    lat_str = re.sub(r'\\\\', r'\\\\[0.4cm]', lat_str)
+    print(lat_str)
+
+
+############################################################################################################
+# Get elasticities for markets
+el_2021 = results.compute_elasticities("prices", market_id = "NEW HAVEN_2021")
+el_2022 = results.compute_elasticities("prices", market_id = "NEW HAVEN_2022")
+
+# Get the column header of the top 3 EVs that are available in both 2021 and 2022
+top_evs = estimation_data.loc[(estimation_data["electric"] == 1)&(estimation_data[2022]==1)&(estimation_data[2021]==1), ["veh_count","column header"]].groupby("column header").sum().sort_values("veh_count", ascending = False).head(3).index.tolist()
+top_nevs = estimation_data.loc[(estimation_data["electric"] != 1)&(estimation_data[2022]==1)&(estimation_data[2021]==1), ["veh_count","column header"]].groupby("column header").sum().sort_values("veh_count", ascending = False).head(5).index.tolist()
+models = top_evs + top_nevs
+
+# Get indexes for these models in 2021 and 2022 markets
+indexes_21 = estimation_data.loc[estimation_data["market_ids"] == "NEW HAVEN_2021"].reset_index(drop = True)["column header"].isin(models)
+indexes_22 = estimation_data.loc[estimation_data["market_ids"] == "NEW HAVEN_2022"].reset_index(drop = True)["column header"].isin(models)
+
+# Get elasticities for these models
+el_2021 = pd.DataFrame(el_2021[indexes_21, :][:, indexes_21], columns = models, index = models)
+el_2022 = pd.DataFrame(el_2022[indexes_22, :][:, indexes_22], columns = models, index = models)
+
+# Function for latex tables:
+def make_latex_table_nice(df):
+    mat = df
+    mat=mat.reset_index().rename(columns = {"index": "Model"})
+    mat.columns = ["\multicolumn{1}{m{2cm}}{\centering "+str(x) + "}" for x in mat.columns]
+    lat_str = mat.to_latex(index = False,
+                           column_format = "l" + "c"*(len(mat.columns)-1),
+                         float_format="%.4f",
+                         formatters = {mat.columns[0]:lambda x: "\multicolumn{1}{m{2.5cm}}{\centering "+x+"}"})
+    lat_str = re.sub(r'(toprule|midrule|bottomrule)', r'hline', lat_str)
+    lat_str = re.sub(r'\\\\', r'\\\\[0.4cm]', lat_str)
+    print(lat_str)
+
+make_latex_table_nice(el_2021)
+make_latex_table_nice(el_2022)
