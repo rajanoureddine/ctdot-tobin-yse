@@ -41,6 +41,7 @@ dt_sc_keep = inmoment_data[[
     'purchase vehicle division',
     'purchase vehicle model',
     'purchase vehicle model series',
+    'edited purchase/lease price us edited purchase price buyers only canada',
     'define diesel hybrid and gas engines by vin',
     'did you consider any other cars or trucks',
     'mmsc division',
@@ -57,7 +58,7 @@ dt_sc_keep = inmoment_data[[
 
 ## Rename columns
 dt_sc_keep.columns = ['study_year','purchase_year','purchase_month','model_year',
-                      'make','model','trim','purchase_fuel',
+                      'make','model','trim', 'edited_purchase_price', 'purchase_fuel', 
                       'sc','sc_make','sc_model','sc_trim','sc_year','sc_fuel',
                       'state',
                       'consider_ev','consider_phev','consider_hybrid',
@@ -89,6 +90,15 @@ dt_sc_keep = pd.concat([dt_sc_keep, pd.get_dummies(dt_sc_keep[["household_income
 ## Save the data
 dt_sc_keep.to_csv(output_dir / f"inmoment_cleaned_for_RLP_{date}.csv", index = False)
 
+## Create income micro-moments
+inc_moments_raw = dt_sc_keep.copy()
+inc_moments_raw = inc_moments_raw[inc_moments_raw['edited_purchase_price'].notna()]
+inc_moments = inc_moments_raw[["household_income_categories", "edited_purchase_price"]].groupby("household_income_categories").mean().drop("none").reset_index()
+inc_moments = inc_moments.rename(columns = {"edited_purchase_price":"value"})
+inc_moments["micro_moment"] = "E[Purchase Price | Income = " + inc_moments["household_income_categories"] + "]"
+inc_moments["value"] = inc_moments["value"] / 1000
+inc_moments = inc_moments[["micro_moment", "value"]]
+
 ## Create columns to mark whether first and choice fuels were broadly EV
 dt_sc_keep['first_choice_broad_ev'] = dt_sc_keep['purchase_fuel'].isin(['Electric','Plug-in Hybrid'])
 dt_sc_keep['sc_broad_ev'] = dt_sc_keep['sc_fuel'].isin(['Electric','Plug-in Hybrid'])
@@ -115,7 +125,7 @@ sc_micro_moments = pd.DataFrame([
     {"micro_moment": "P(SC = Broad EV | FC = Broadly EV)", "value": cond_prob_sc_broad_ev_fc_broad_ev}
 ])
 
-all_micro_moments = pd.concat([sc_micro_moments, inc_micro_moments])
+all_micro_moments = pd.concat([sc_micro_moments, inc_micro_moments, inc_moments], axis = 0)
 
 # Save in output directory
 all_micro_moments.to_csv(output_dir / f"micro_moments_{date}.csv", index = False)
