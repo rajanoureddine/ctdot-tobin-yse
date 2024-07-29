@@ -1,5 +1,6 @@
-############################################################################################################
-# Import necessary packages
+# auto_strategies_env (conda; not pyblp 0.13)
+# ase_blp_1_0 (conda; pyblp 1.0)
+# or ev_env (up-to-date pyblp; lives in SW_Automaker_Strategies folder)
 import numpy as np
 import pandas as pd
 #import censusdata
@@ -17,6 +18,8 @@ from linearmodels.iv import IV2SLS # this is to check IV results
 from functions import * # this is the set of additional functions
 
 pyblp.options.verbose = True
+pyblp.options.singular_tol = np.inf
+#pyblp.options.micro_computation_chunks = 400
 
 # determine whether this is running on the cluster
 bln_cluster = check_cluster()
@@ -46,7 +49,7 @@ print("nodes: "+ str(n_nodes_par))
 #version = 'New England'
 #version = 'state'
 version = 'hybrid' # ZEV states + a few others are each treated as separate market
-#version = 'hybrid/regional' # ZEV states + others grouped into census divisions
+#version = 'hybrid_regional' # ZEV states + others grouped into census divisions
 #version = 'national'
 print('version: '+version)
 print(pyblp.__version__)
@@ -57,21 +60,21 @@ dynamic = False
 
 # model
 #model = 'DGV'
-model = 'logit'
+#model = 'logit'
 #model = 'rc'
 #model = 'rc_demo'
-####model = 'rc_demo_moments'
+model = 'rc_demo_moments'
 #model = 'nested_logit'
 #model = 'rc_nl'
 #model = 'rc_nl_moments'
 
 # number of iterations
-#gmm_rounds = '1s'
-gmm_rounds = '2s'
+gmm_rounds = '1s'
+#gmm_rounds = '2s'
 
 # set number of simulated agents per market
 # does not apply if using gaussian quadrature, but affects remaining integration approaches
-n_agent = 5000
+n_agent = 1200
 
 # include 2021 data
 incl_2021 = True
@@ -79,6 +82,10 @@ incl_2021 = True
 # re-scale income moments
 bln_rescale_income = False
 bln_truncate_income = True
+# re-scale msrp moments
+bln_rescale_msrp = True
+# reduce size of market
+bln_reduce_mkt = False
 
 # integration setting
 #integ = 'monte_carlo'
@@ -94,7 +101,6 @@ print("Integration setting:" + integ)
 #split = 't3'
 split = 'None'
 #split = 'None, ann. moments' # full time period, separate moments by year
-#split = 'geog'
 print_split(split)
 
 #####################
@@ -115,38 +121,34 @@ str_data = 'data/'
 ##########################
 # read in and clean data #
 ##########################
-# read in VIN data - file of approx 100000 rows, including car characteristics
+# read in VIN data
 vin_data = read_vin_data(str_project,str_data,version,dynamic)
 
-# read in census data - contains population, income, etc. for every state for four years
+# read in census data
 census_data = read_census_data(str_project,str_data,version)
 
-# haircut first and potentially last market based on missing addl data - alters the census data
+# haircut first and potentially last market based on missing addl data
 census_data = haircut_interpolate_census(str_project,str_data,census_data,incl_2021)
 
 # read in agent observations if needed
-# Interesting file - many rows of simulated agents from different states, presumably they are based on the 
-# known distribution of income, households, etc. for each state
 agent_data = read_agent_data(str_project,str_data,model,version,n_agent,incl_2021,bln_rescale_income,bln_truncate_income)
 
 # rename moments if needed
 dict_moments = read_moments(str_project,str_data,split,bln_rescale_income)
 
 # merge vin and census data
-# Note - this is the point at which we create the market data that is used later on
-# This also adds a share for each VIN number, state, model year
-mkt_data = merge_vin_census(vin_data,census_data,version,dynamic)
+mkt_data = merge_vin_census(vin_data,census_data,version,dynamic,bln_reduce_mkt)
+
+## Add broad_ev_hybrid category in mkt_data ##
+mkt_data['broad_ev_hybrid'] = np.where(mkt_data['fueltype'].isin(['I', 'Y', 'L']), 1, 0)
 
 # clean data (rename vars, drop missing/problematic observations)
-# Various cleaning functions, add a time trend, add a clustering ID for standard errors
 mkt_data = clean_market_data(mkt_data,version)
 
 # calculate outside good share
-# Calculate the share of the outside good by summing up all the known shares and subtracting them from 1
 mkt_data = calc_outside_good(mkt_data,version)
 
 # generate PyBLP instruments
-# Add instruments - this part is complex
 mkt_data = generate_pyblp_instruments(mkt_data)
 
 # if single state, keep only relevant market data, agent data
@@ -169,15 +171,17 @@ if(False):
 
 # if only running subset of years (adjust mkt_data, agent_data, moments)
 mkt_data,agent_data,dict_moments,yr_keep = subset_years(mkt_data,agent_data,model,split,dict_moments)
-
+#mkt_data = mkt_data.loc[mkt_data.model_year > 2014]
 ####################
 # run PyBLP models #
 ####################
 mkt_data_keep = mkt_data.copy()
 if model == 'logit':
     # run logit with corrected prices
-    logit_formulation = pyblp.Formulation('0 + prices + dollar_per_mile + electric + phev + electric:CA + phev:CA + hybrid + diesel + log_hp_weight + wheelbase + doors + range_elec + range_elec:CA + C(make) + C(drivetype) + C(bodytype)')
-    
+    #logit_formulation = pyblp.Formulation('0 + prices + dollar_per_mile + electric + phev + electric:CA + phev:CA + hybrid + diesel + log_hp_weight + wheelbase + doors + range_elec + range_elec:CA + C(make) + C(drivetype) + C(bodytype) + C(state)')
+    logit_formulation = pyblp.Formulation('0 + prices + dollar_per_mile + electric + phev + electric + phev + hybrid + diesel + log_hp_weight + wheelbase + doors + range_elec + range_elec + C(make) + C(drivetype) + C(bodytype) + C(state)')
+
+
     problem = pyblp.Problem(logit_formulation, mkt_data)
     logit_results_price_updated = problem.solve()
 
@@ -202,9 +206,9 @@ if model == 'rc':
     #X1_formulation = pyblp.Formulation('0+ prices + dollar_per_mile + electric:t1 + electric:t2 + electric:t3 + phev + hybrid + diesel+ log_hp_weight + wheelbase + doors + range_elec + C(make) + C(drivetype) + C(bodytype)')
     #X2_formulation = pyblp.Formulation('0 + electric:t1 + electric:t2 + electric:t3')
     #X1_formulation = pyblp.Formulation('0 + prices + dollar_per_mile + electric + phev + hybrid + diesel + log_hp_weight + wheelbase + doors + range_elec + C(make) + C(drivetype) + C(bodytype)')
-    X1_formulation = pyblp.Formulation('0 + prices + dollar_per_mile + electric + phev + hybrid + diesel + log_hp_weight + wheelbase + doors + range_elec:time_trend + C(make) + C(drivetype) + C(bodytype) + C(state)')
-    X2_formulation = pyblp.Formulation('0 + broad_ev')
+    X1_formulation = pyblp.Formulation('0 + prices + dollar_per_mile + electric + phev + hybrid + diesel + log_hp_weight + wheelbase + doors + range_elec + C(make) + C(drivetype) + C(bodytype) + C(state)')
 
+    X2_formulation = pyblp.Formulation('0 + broad_ev')
     product_formulations = (X1_formulation, X2_formulation)
     # should look into alt integration approaches
     if(integ in ['monte_carlo','halton','mlhs','lhs']):
@@ -213,8 +217,8 @@ if model == 'rc':
         integration = pyblp.Integration('grid', size=20)
 
     mc_problem = pyblp.Problem(product_formulations, mkt_data, integration=integration)
-    optim = pyblp.Optimization('l-bfgs-b',{'gtol': 1e-14}) 
-    iter = pyblp.Iteration('squarem') # using squarem acceleration method
+    optim = pyblp.Optimization('l-bfgs-b',{'gtol': 1e-10}) 
+    iter = pyblp.Iteration('squarem',{'atol': 1e-10}) # using squarem acceleration method
     eye = np.eye(1)
     sigma_guess = eye
     sigma_lb = sigma_guess * 0
@@ -236,29 +240,44 @@ if model == 'rc':
     df_rand_coeffs[df_rand_coeffs["param"].str.contains('electric')]
     df_rand_coeffs[df_rand_coeffs["param"].str.contains('phev')]
     results = results1
-
 if model == 'rc_demo' or model == 'rc_demo_moments' or model == 'rc_nl' or model == 'rc_nl_moments':
     # create a dataframe that stores the random coefficients, which demographics they're interacted with, etc.
     #dict_X2 = {'broad_ev': ['rc','urban'],
     #           'prices': ['I(1/income)']}
     #dict_X2 = {'broad_ev': ['rc','urban'],
     #           'prices': ['I(low/income)','I(mid/income)','I(high/income)']}
+    #dict_X2 = {'broad_ev': ['urban'],
+    #           'prices': ['I(1/income)'],
+    #           '1': ['rc']}
+    #dict_X2 = {'wheelbase':['rc'],
+    #           'prices': ['I(1/income)']}
+    #dict_X2 = {'dollar_per_mile': ['rc'],
+    #           'prices': ['I(1/income)']
+    #}
+    #dict_X2 = {'prices': ['I(1/income)']}
+    # dict_X2 = {'broad_ev': ['charging_density']}
     dict_X2 = {'broad_ev': ['urban'],
-               'prices': ['I(1/income)'],
-               '1': ['rc']}
+               'broad_ev_hybrid': ['rc'],
+               'prices': ['I(1/income)']} 
+
     # product formulations
-    # if 'prices' is onCe of the keys in dict_X2
+    # if 'prices' is one of the keys in dict_X2
+    str_X1 = 'dollar_per_mile + electric + phev + hybrid + diesel + log_hp_weight + wheelbase + doors + range_elec + C(make) + C(drivetype) + C(bodytype) + C(state)'
     if('prices' in dict_X2.keys()):
-        X1_formulation = pyblp.Formulation('0 + dollar_per_mile + electric + phev + hybrid + diesel + log_hp_weight + wheelbase + doors + range_elec + C(make) + C(drivetype) + C(bodytype)')
+        X1_formulation = pyblp.Formulation('0 +' + str_X1)
     else:
-        X1_formulation = pyblp.Formulation('0 + prices + dollar_per_mile + electric + phev + hybrid + diesel + log_hp_weight + wheelbase + doors + range_elec + C(make) + C(drivetype) + C(bodytype)')
+        X1_formulation = pyblp.Formulation('0 + prices + ' + str_X1)
 
     str_x2_formulation = '1'
     for x2 in dict_X2:
         if x2 != '1':
             str_x2_formulation = str_x2_formulation + '+' + x2
-    # 1 + broad_ev + prices
-    
+        if x2 == 'dollar_per_mile':
+            str_x2_formulation = str_x2_formulation + '+dpm_quantile_1+dpm_quantile_5'
+        if x2 == 'wheelbase':
+            str_x2_formulation = str_x2_formulation + '+wb_quantile_1+wb_quantile_3'
+    #str_x2_formulation = str_x2_formulation + '+dollar_per_mile+dpm_quantile_1+dpm_quantile_5+wheelbase+wb_quantile_1+wb_quantile_3'
+
     X2_formulation = pyblp.Formulation(str_x2_formulation)
     product_formulations = (X1_formulation,X2_formulation)
     # agent formulation
@@ -273,7 +292,7 @@ if model == 'rc_demo' or model == 'rc_demo_moments' or model == 'rc_nl' or model
     lst_demogs = ['1'] + lst_demogs
     # add the mid/high if they are interacted with something
     if any(item in ['I(mid/income)', 'I(1/income)'] for item in lst_demogs):
-        lst_demogs = lst_demogs + ['mid','high']
+        lst_demogs = lst_demogs + ['low','mid','high']
     for d in lst_demogs:
         if d == '1':
             str_d_formulation =  d
@@ -301,7 +320,7 @@ if model == 'rc_demo' or model == 'rc_demo_moments' or model == 'rc_nl' or model
             for interaction in interactions:
                 if interaction == 'rc':
                     initial_sigma[i,i] = 5
-                    sigma_ub[i,i] = 100
+                    sigma_ub[i,i] = 20
                 else:
                     # get index of demographic within list demographics
                     j = lst_demogs.index(interaction)
@@ -309,11 +328,11 @@ if model == 'rc_demo' or model == 'rc_demo_moments' or model == 'rc_nl' or model
                     if (interaction in ['I(1/income)','I(low/income)','I(mid/income)','I(high/income)']): # THIS IS A TEMPORARY FIX TO SET UB = 0
                         pi_bds[1][i,j] = 0
                         if(interaction == 'I(low/income)'):
-                            initial_pi[i,j] = -30
+                            initial_pi[i,j] = -15
                         else:
-                            initial_pi[i,j] = -10
+                            initial_pi[i,j] = -11
 
-     # process agent data
+    # process agent data
     # get number of nodes required
     n_nodes = int((initial_sigma != 0).sum())
     if (n_nodes == 0):
@@ -367,6 +386,11 @@ if model == 'rc_demo' or model == 'rc_demo_moments' or model == 'rc_nl' or model
         else:
             agent_data = pd.concat([agent_data.drop(['weights'],axis=1).reset_index(drop=True),df_nodes_all],axis=1)
 
+    # if using charging_density, need to adjust agent_data and product_data
+    if ('charging_density' in dict_X2['broad_ev']):
+        # get agent data without na charging_density
+        agent_data = agent_data.loc[~agent_data.charging_density.isna()]
+        mkt_data = mkt_data.loc[mkt_data.model_year.isin(agent_data.model_year.unique())]
     micro_moments = []
     if model == 'rc_demo_moments' or model == 'rc_nl_moments':
         # characteristic expectation moment: expectation of characteristic chosen by certain agents
@@ -378,14 +402,14 @@ if model == 'rc_demo' or model == 'rc_demo_moments' or model == 'rc_nl' or model
             micro_moments = moments_v_10_12(mkt_data,agent_data,dict_X2,lst_demogs,split,yr_keep,dict_moments)
         elif pyblp.__version__ == '0.13.0':
             print('moment calculation not working within pyblp 13.0')
-        elif pyblp.__version__ == '1.0.0':
+        elif pyblp.__version__ in ('1.0.0','1.1.0'):
             if split == 'None':
                 compute_ratio = lambda v: v[0] / v[1] 
                 compute_ratio_gradient = lambda v: [1 / v[1], -v[0] / v[1]**2]
                 #if(False):
                 if ('broad_ev' in dict_X2.keys()):
+                    broad_ev_index  = lst_x2_full.index('broad_ev')
                     if ('urban' in dict_X2['broad_ev']):
-                        broad_ev_index  = lst_x2_full.index('broad_ev')
                         urban_index = lst_demogs.index('urban')
 
                         df_moments_urban = dict_moments['urban']
@@ -418,9 +442,73 @@ if model == 'rc_demo' or model == 'rc_demo_moments' or model == 'rc_nl' or model
                                             compute_gradient=compute_ratio_gradient,
                                             )
                                             ]  
+                    if ('charging_density' in dict_X2['broad_ev']):
+                        cd_index = lst_demogs.index('charging_density')
+
+                        df_moments_cd = dict_moments['charging_density']
+                        micro_statistics = df_moments_cd.loc[(df_moments_cd.year == 0) & (df_moments_cd.broad_ev == 1)]
+                        micro_dataset = pyblp.MicroDataset(
+                                        name="Velocity",
+                                        observations=int(micro_statistics.n_obs),
+                                        market_ids = mkt_data.loc[mkt_data.model_year.isin([*range(2017,2022,1)]),'market_ids'].unique(),
+                                        compute_weights=lambda t, p, a: np.ones((a.size, p.size)),
+                                        )
+                        #micro_statistics = pd.read_csv(str_project + 'data/final/test_moment.csv', index_col=0)
+                        cd_part = pyblp.MicroPart(
+                                        name="E[cd * broad_ev_j]",
+                                        dataset=micro_dataset,
+                                        compute_values=lambda t, p, a: np.outer(a.demographics[:, cd_index], 
+                                                                                p.X2[:, broad_ev_index]),
+                                        )
+                        ev_part = pyblp.MicroPart(
+                                    name="E[broad_ev]",
+                                    dataset=micro_dataset,
+                                    compute_values=lambda t, p, a: np.outer(a.demographics[:, 0], 
+                                                                            p.X2[:, broad_ev_index]),
+                                    )
+
+                        micro_moments = micro_moments + [ 
+                            pyblp.MicroMoment(name="E[cd | broad_ev]", 
+                                            value=float(micro_statistics.moment),
+                                            parts=[cd_part, ev_part],
+                                            compute_value=compute_ratio,
+                                            compute_gradient=compute_ratio_gradient,
+                                            )
+                                            ]
+                    # if ('rc' in dict_X2['broad_ev']):
+                    if ('rc' in dict_X2['broad_ev_hybrid']):
+                        df_moments_sc_fuel = dict_moments['sc_fuel']
+                        micro_statistics = df_moments_sc_fuel.loc[(df_moments_sc_fuel.year == 2019) & (df_moments_sc_fuel.purchase_fuel == "Broad EV Hybrid") & (df_moments_sc_fuel.sc_fuel == "Broad EV Hybrid")]
+                        micro_dataset = pyblp.MicroDataset(
+                                    name="InMoment",
+                                    observations=int(micro_statistics.n_fuel_spec),
+                                    market_ids = mkt_data.loc[mkt_data.model_year.isin([2019]),'market_ids'].unique(),
+                                    compute_weights=lambda t, p, a: np.ones((a.size, p.size, p.size)),
+                                    )
+                        sc_ev_part = pyblp.MicroPart(
+                                    name="E[broad_ev_1 * broad_ev_2]",
+                                    dataset=micro_dataset,
+                                    compute_values=lambda t, p, a: np.einsum('i,j,k->ijk',a.demographics[:, 0], p.X2[:, broad_ev_index], p.X2[:, broad_ev_index]))
+                        ev_part = pyblp.MicroPart(
+                                name="E[broad_ev_1]",
+                                dataset=micro_dataset,
+                                compute_values=lambda t, p, a: np.einsum('i,j,k->ijk',a.demographics[:, 0], p.X2[:, broad_ev_index], p.X2[:, 0]))
+                        micro_moments = micro_moments + [ 
+                            pyblp.MicroMoment(name="E[broad_ev_2 | broad_ev_1]", 
+                                          value=float(micro_statistics.pct_spec),
+                                          parts=[sc_ev_part, ev_part],
+                                          compute_value=compute_ratio,
+                                          compute_gradient=compute_ratio_gradient,
+                                          )
+                                          ]
                 if ('prices' in dict_X2.keys()): 
                     if (any(item in ['I(mid/income)', 'I(1/income)'] for item in dict_X2['prices'])):
+                        if bln_rescale_msrp:
+                            int_rescale = 10
+                        else: 
+                            int_rescale = 1
                         prices_index  = lst_x2_full.index('prices')
+                        low_index = str_d_formulation.split('+').index('low')
                         mid_index = str_d_formulation.split('+').index('mid')
                         high_index = str_d_formulation.split('+').index('high')
                         micro_statistics = dict_moments['income_grp']
@@ -430,12 +518,31 @@ if model == 'rc_demo' or model == 'rc_demo_moments' or model == 'rc_nl' or model
                                     market_ids = mkt_data.loc[mkt_data.model_year.isin([*range(2017,2022,1)]),'market_ids'].unique(),
                                     compute_weights = lambda t, p, a: np.ones((a.size, p.size)),
                                     )
+                        # generate msrp | low income group moment
+                        msrp_low_part = pyblp.MicroPart(
+                            name = "E(msrp_i * low_j)",
+                            dataset = micro_dataset,
+                            compute_values = lambda t, p, a: np.outer(a.demographics[:, low_index], 
+                                                                    p.X2[:, prices_index]/int_rescale),
+                        )
+                        low_part = pyblp.MicroPart(
+                            name = "E(low_j)",
+                            dataset = micro_dataset,
+                            compute_values = lambda t, p, a: np.outer(a.demographics[:, low_index], 
+                                                                    p.X2[:,0]),
+                        )
+                        moment_low = pyblp.MicroMoment(name="E[msrp | income_low_j]", 
+                                                    value=float(micro_statistics.loc[micro_statistics.income_grp == 'low','mean_msrp'])/int_rescale,
+                                                    parts=[msrp_low_part, low_part],
+                                                    compute_value=compute_ratio,
+                                                    compute_gradient=compute_ratio_gradient,
+                                                    )
                         # generate msrp | mid income group moment
                         msrp_mid_part = pyblp.MicroPart(
                             name = "E(msrp_i * mid_j)",
                             dataset = micro_dataset,
                             compute_values = lambda t, p, a: np.outer(a.demographics[:, mid_index], 
-                                                                    p.X2[:, prices_index]),
+                                                                    p.X2[:, prices_index]/int_rescale),
                         )
                         mid_part = pyblp.MicroPart(
                             name = "E(mid_j)",
@@ -444,7 +551,7 @@ if model == 'rc_demo' or model == 'rc_demo_moments' or model == 'rc_nl' or model
                                                                     p.X2[:,0]),
                         )
                         moment_mid = pyblp.MicroMoment(name="E[msrp | income_mid_j]", 
-                                                    value=float(micro_statistics.loc[micro_statistics.income_grp == 'med','mean_msrp']),
+                                                    value=float(micro_statistics.loc[micro_statistics.income_grp == 'med','mean_msrp'])/int_rescale,
                                                     parts=[msrp_mid_part, mid_part],
                                                     compute_value=compute_ratio,
                                                     compute_gradient=compute_ratio_gradient,
@@ -454,7 +561,7 @@ if model == 'rc_demo' or model == 'rc_demo_moments' or model == 'rc_nl' or model
                             name = "E(msrp_i * high_j)",
                             dataset = micro_dataset,
                             compute_values = lambda t, p, a: np.outer(a.demographics[:,high_index], 
-                                                                    p.X2[:, prices_index]),
+                                                                    p.X2[:, prices_index]/int_rescale),
                         )
                         high_part = pyblp.MicroPart(
                             name = "E(high_j)",
@@ -463,13 +570,169 @@ if model == 'rc_demo' or model == 'rc_demo_moments' or model == 'rc_nl' or model
                                                                     p.X2[:,0]),
                         )
                         moment_high = pyblp.MicroMoment(name="E[msrp | income_high_j]", 
-                                                    value=float(micro_statistics.loc[micro_statistics.income_grp == 'high','mean_msrp']),
+                                                    value=float(micro_statistics.loc[micro_statistics.income_grp == 'high','mean_msrp'])/int_rescale,
                                                     parts=[msrp_high_part, high_part],
                                                     compute_value=compute_ratio,
                                                     compute_gradient=compute_ratio_gradient,
                                                     )
-                        micro_moments = micro_moments + [moment_mid, moment_high]
-                    #micro_moments = micro_moments + [moment_high]
+                        micro_moments = micro_moments + [moment_low, moment_mid, moment_high]
+                        #micro_moments = micro_moments + [moment_high]
+                                # compute covariance
+                compute_cov = lambda v: v[0] - v[1] * v[2]
+                compute_cov_gradient = lambda v: [1, -v[2], -v[1]]
+                df_moments_sc_cov = dict_moments['sc_cov']
+                if ('wheelbase' in dict_X2.keys()):
+                #if(True):
+                    wheelbase_index  = lst_x2_full.index('wheelbase')
+                    # get row of df_moments_sc_cov where 'char' = 'wheelbase'
+                    micro_statistics = df_moments_sc_cov.loc[(df_moments_sc_cov.char == 'wheelbase')]
+                    if(False):
+                        micro_dataset = pyblp.MicroDataset(
+                                    name="InMoment WB",
+                                    observations=int(micro_statistics.n),
+                                    market_ids = mkt_data.loc[mkt_data.model_year.isin([2020]),'market_ids'].unique(),
+                                    compute_weights=lambda t, p, a: np.ones((a.size, p.size, p.size)),
+                                    )
+                        EXY_part = pyblp.MicroPart(
+                                    name = "E[wheelbase_1*wheelbase_2]",
+                                    dataset = micro_dataset,
+                                    compute_values = lambda t, p, a:  np.einsum('i,j,k->ijk',a.demographics[:, 0], p.X2[:, wheelbase_index], p.X2[:, wheelbase_index])
+                                    )
+                        EX_part = pyblp.MicroPart(
+                                    name = "E[wheelbase_1]",
+                                    dataset = micro_dataset,
+                                    compute_values = lambda t, p, a:  np.einsum('i,j,k->ijk',a.demographics[:, 0], p.X2[:, wheelbase_index], p.X2[:, 0])
+                                    )
+                        EY_part =  pyblp.MicroPart(
+                                    name = "E[wheelbase_2]",
+                                    dataset = micro_dataset,
+                                    compute_values = lambda t, p, a:  np.einsum('i,j,k->ijk',a.demographics[:, 0], p.X2[:, 0], p.X2[:, wheelbase_index])
+                                    )
+                        
+                        micro_moments = micro_moments + [
+                            pyblp.MicroMoment(name = "Cov(wheelbase_1, wheelbase_2)",
+                                            value = float(micro_statistics.val),
+                                            parts = [EXY_part, EX_part, EY_part],
+                                            compute_value = compute_cov,
+                                            compute_gradient = compute_cov_gradient,)
+                        ]
+                    if(True):
+                        wb_quantile_1_index = lst_x2_full.index('wb_quantile_1')
+                        wb_quantile_3_index = lst_x2_full.index('wb_quantile_3')
+                        df_sc_wb_quantile = dict_moments['sc_wb_quantile']
+                        micro_dataset = pyblp.MicroDataset(
+                            name = 'InMoment WB Quantile',
+                            observations = int(df_sc_wb_quantile.n.sum()),
+                            market_ids = mkt_data.loc[mkt_data.model_year.isin([*range(2018,2022,1)]),'market_ids'].unique(),
+                            compute_weights = lambda t, p, a: np.ones((a.size,p.size,p.size)),
+                        )
+                        sc_1_1_part_WB = pyblp.MicroPart(
+                            name = "E[wb_quantile_1_1*wb_quantile_1_2]",
+                            dataset = micro_dataset,
+                            compute_values = lambda t, p, a: np.einsum('i,j,k->ijk',a.demographics[:, 0], p.X2[:, wb_quantile_1_index], p.X2[:, wb_quantile_1_index])
+                        )
+                        fc_1_part_WB = pyblp.MicroPart(
+                            name = 'E[wb_quantile_1]',
+                            dataset = micro_dataset,
+                            compute_values = lambda t, p, a: np.einsum('i,j,k->ijk',a.demographics[:, 0], p.X2[:, wb_quantile_1_index], p.X2[:, 0])
+                        )
+                        moment_wb_1_1 = pyblp.MicroMoment(name='E[wb_quantile_1_2 | wb_quantile_1_1]',
+                                                           parts = [sc_1_1_part_WB, fc_1_part_WB],
+                                                           value = float(df_sc_wb_quantile.loc[(df_sc_wb_quantile.quantile_wheelbase == 1) & (df_sc_wb_quantile.sc_quantile_wheelbase == 1),'pct']),
+                                                           compute_value = compute_ratio,
+                                                           compute_gradient = compute_ratio_gradient,)
+                                                           
+                        sc_3_1_part_WB = pyblp.MicroPart(
+                            name = "E[wb_quantile_1_1*wb_quantile_3_2]",
+                            dataset = micro_dataset,
+                            compute_values = lambda t, p, a: np.einsum('i,j,k->ijk',a.demographics[:, 0], p.X2[:, wb_quantile_1_index], p.X2[:, wb_quantile_3_index])
+                        )
+                        moment_wb_1_3 = pyblp.MicroMoment(name='E[wb_quantile_3_2 | wb_quantile_1_1]',
+                                                           parts = [sc_3_1_part_WB, fc_1_part_WB],
+                                                           value = float(df_sc_wb_quantile.loc[(df_sc_wb_quantile.quantile_wheelbase == 1) & (df_sc_wb_quantile.sc_quantile_wheelbase == 3),'pct']),
+                                                           compute_value = compute_ratio,
+                                                           compute_gradient = compute_ratio_gradient,)
+                        micro_moments = micro_moments + [moment_wb_1_1,moment_wb_1_3]
+                if 'dollar_per_mile' in dict_X2.keys():
+                #if(True):
+                    if(False): # covariance of dollar per mile
+                        dpm_index = lst_x2_full.index('dollar_per_mile')
+                        # get row of df_moments_sc_cov where 'char' = 'dollar_per_mile'
+                        micro_statistics = df_moments_sc_cov.loc[(df_moments_sc_cov.char == 'dollar_per_mile')]
+                        micro_dataset = pyblp.MicroDataset(
+                                    name="InMoment FC",
+                                    observations=int(micro_statistics.n),
+                                    market_ids = mkt_data.loc[mkt_data.model_year.isin([*range(2018,2022,1)]),'market_ids'].unique(),
+                                    compute_weights=lambda t, p, a: np.ones((a.size, p.size, p.size)),
+                                    )
+                        EXY_part = pyblp.MicroPart(
+                                    name = "E[dpm_1*dpm_2]",
+                                    dataset = micro_dataset,
+                                    compute_values = lambda t, p, a:  np.einsum('i,j,k->ijk',a.demographics[:, 0], p.X2[:, dpm_index], p.X2[:, dpm_index])
+                                    )
+                        EX_part = pyblp.MicroPart(
+                                    name = "E[dpm_1]",
+                                    dataset = micro_dataset,
+                                    compute_values = lambda t, p, a:  np.einsum('i,j,k->ijk',a.demographics[:, 0], p.X2[:, dpm_index], p.X2[:, 0])
+                                    )
+                        EY_part =  pyblp.MicroPart(
+                                    name = "E[dpm_2]",
+                                    dataset = micro_dataset,
+                                    compute_values = lambda t, p, a:  np.einsum('i,j,k->ijk',a.demographics[:, 0], p.X2[:, 0], p.X2[:, dpm_index])
+                                    )
+                        
+                        micro_moments = micro_moments + [
+                            pyblp.MicroMoment(name = "Cov(dpm_1, dpm_2)",
+                                            value = float(micro_statistics.val),
+                                            parts = [EXY_part, EX_part, EY_part],
+                                            compute_value = compute_cov,
+                                            compute_gradient = compute_cov_gradient,)
+                        ]
+                    # quantiles of first and second choice moments
+                    if(True):
+                        dpm_quantile_1_index = lst_x2_full.index('dpm_quantile_1')
+                        dpm_quantile_5_index = lst_x2_full.index('dpm_quantile_5')
+                        df_sc_dpm_quantile = dict_moments['sc_dpm_quantile']
+                        micro_dataset = pyblp.MicroDataset(
+                            name = 'InMoment DPM Quantile',
+                            observations = int(df_sc_dpm_quantile.n.sum()),
+                            market_ids = mkt_data.loc[mkt_data.model_year.isin([*range(2018,2022,1)]),'market_ids'].unique(),
+                            compute_weights = lambda t, p, a: np.ones((a.size,p.size,p.size)),
+                        )
+                        
+                        sc_1_1_part = pyblp.MicroPart(
+                            name = "E[dpm_quantile_1_1*dpm_quantile_1_2]",
+                            dataset = micro_dataset,
+                            compute_values = lambda t, p, a: np.einsum('i,j,k->ijk',a.demographics[:, 0], p.X2[:, dpm_quantile_1_index], p.X2[:, dpm_quantile_1_index])
+                        )
+                        fc_1_part = pyblp.MicroPart(
+                            name = 'E[dpm_quantile_1]',
+                            dataset = micro_dataset,
+                            compute_values = lambda t, p, a: np.einsum('i,j,k->ijk',a.demographics[:, 0], p.X2[:, dpm_quantile_1_index], p.X2[:, 0])
+                        )
+                        moment_dpm_1_1 = pyblp.MicroMoment(name='E[dpm_quantile_1_2 | dpm_quantile_1_1]',
+                                                           parts = [sc_1_1_part, fc_1_part],
+                                                           value = float(df_sc_dpm_quantile.loc[(df_sc_dpm_quantile.quantile_dollar_per_mile == 1) & (df_sc_dpm_quantile.sc_quantile_dollar_per_mile == 1),'pct']),
+                                                           compute_value = compute_ratio,
+                                                           compute_gradient = compute_ratio_gradient,)
+                        micro_moments = micro_moments + [moment_dpm_1_1]
+                        if(False):
+                            sc_5_5_part = pyblp.MicroPart(
+                                name = "E[dpm_quantile_5_1*dpm_quantile_5_2]",
+                                dataset = micro_dataset,
+                                compute_values = lambda t, p, a: np.einsum('i,j,k->ijk',a.demographics[:, 0], p.X2[:, dpm_quantile_5_index], p.X2[:, dpm_quantile_5_index])
+                            )
+                            fc_5_part = pyblp.MicroPart(
+                                name = 'E[dpm_quantile_5]',
+                                dataset = micro_dataset,
+                                compute_values = lambda t, p, a: np.einsum('i,j,k->ijk',a.demographics[:, 0], p.X2[:, dpm_quantile_5_index], p.X2[:, 0])
+                            )
+                            moment_dpm_5_5 = pyblp.MicroMoment(name='E[dpm_quantile_5_2 | dpm_quantile_5_1]',
+                                                               value = float(df_sc_dpm_quantile.loc[(df_sc_dpm_quantile.quantile_dollar_per_mile == 5) & (df_sc_dpm_quantile.sc_quantile_dollar_per_mile == 5),'pct']),
+                                                               parts = [sc_5_5_part, fc_5_part],
+                                                               compute_value = compute_ratio,
+                                                               compute_gradient = compute_ratio_gradient,)
+                            micro_moments = micro_moments + [moment_dpm_5_5]
         else:
             print('confirm how moments work in current pyblp version')
     mkt_data2 = mkt_data.copy()
@@ -499,7 +762,7 @@ if model == 'rc_demo' or model == 'rc_demo_moments' or model == 'rc_nl' or model
 
     # solve
     optim = pyblp.Optimization('l-bfgs-b',{'gtol': 1e-8})
-    iter = pyblp.Iteration('squarem') # using squarem acceleration method
+    iter = pyblp.Iteration('squarem',{'atol': 1e-10}) # using squarem acceleration method
     if parallel:
         with pyblp.parallel(n_nodes_par,use_pathos=True):
             results_demo = problem.solve(sigma = initial_sigma, pi = initial_pi, 
@@ -508,6 +771,7 @@ if model == 'rc_demo' or model == 'rc_demo_moments' or model == 'rc_nl' or model
                                          rho_bounds = rho_bounds,
                                          micro_moments = micro_moments,optimization=optim,iteration=iter,
                                          pi_bounds = pi_bds,
+                                         method = gmm_rounds
                                          )
     else:
         results_demo = problem.solve(sigma = initial_sigma, pi = initial_pi, 
