@@ -227,13 +227,15 @@ def prepare_rlp_data(df, pop_density_path, charging_data_path, makes_to_remove =
     return mkt_data
 
 # Function to run random coefficients logit model
-def run_rc_logit_model(rlp_df, subfolder, estimation_data_folder, agent_data = None, use_micro_moments = False):
+def run_rc_logit_model(rlp_df, 
+                       subfolder, 
+                       estimation_data_folder, 
+                       agent_data = None, use_micro_moments = False, 
+                       micro_moments_to_include = None):
     """
-    Runs a random coefficients logit model without agent data. 
-    We run for the RLP data only - as opposed to the above, that compares.
-    We run for only one specification, not multiple. 
+    Estimates Random Coefficients Logit model using PyBLP
     """
-    # If agent data, log it 
+    # If using agent data, include source of agent data in the log file
     if agent_data is not None:
         logging.info(f"Agent Data used: {str_agent_data}")
 
@@ -241,38 +243,50 @@ def run_rc_logit_model(rlp_df, subfolder, estimation_data_folder, agent_data = N
     integ = 'monte_carlo'
     n_agent = 1000
     gmm_rounds = '2s'
-    sensitivity = 5e-2 # Increased this significantly. When we use gtol, this is the gradient tolerance. ftol is function tolerance. 
+    sensitivity = 5e-1 # Increased this significantly. When we use gtol, this is the gradient tolerance. ftol is function tolerance. 
 
-    # Save the market data
-    # exp_df.to_csv(estimation_data_folder / f'exp_mkt_data_{date_time}.csv',index = False)
+    # Save the market data used for the estimation - to ensure that we can replicate in future if required
     rlp_df.to_csv(estimation_data_folder / f'rc_mkt_data_{rlp_market}_{date_time}.csv',index = False)
 
-    # Create the broad_ev variable
+    # Create a Dummy Variable to indicate if the car is electric or plug-in hybrid
     rlp_df["broad_ev_nohybrid"] = rlp_df["electric"] + rlp_df["phev"]
 
-    # Set up the formulation
-    X1_formulation_str = '0 + prices + dollar_per_mile + electric + phev + hybrid + diesel + wheelbase + log_hp_weight + doors + range_elec + C(make) + C(drivetype) + C(bodytype)'
+    # Set up the linear (X1) and non-linear (X2) product formulation
+    X1_formulation_str = 'dollar_per_mile + electric + phev + hybrid + diesel + wheelbase + log_hp_weight + doors + range_elec + C(make) + C(drivetype) + C(bodytype)'
+    X2_formulation_str = '1 + prices'
+
+    # If prices is in X2, do not include it in X1
+    if 'prices' in X2_formulation_str:
+        X1_formulation_str = '0 +' + X1_formulation_str
+    else:
+        X1_formulation_str = '0 + prices +' + X1_formulation_str
+
+    # Convert to PyBLP formulation
     X1_formulation = pyblp.Formulation(X1_formulation_str)
-    X2_formulation_str = '1+broad_ev_nohybrid'
     X2_formulation = pyblp.Formulation(X2_formulation_str)
     product_formulations = (X1_formulation, X2_formulation)
 
-    # Log the formulations
+    # Log the formulations used for this run
     logging.info(f"X1 Formulation: {X1_formulation_str}")
     logging.info(f"X2 Formulation: {X2_formulation_str}")
 
-    # Set up the sigma formulation
+    # Set up Sigma - this is random heterogeneity that is unrelated to agent data
+    # Sigma is a K2 x K2 matrix, where K2 is the number of non-linear product characteristics
     K2 = len(X2_formulation_str.split('+')) - (1 * ('0' in X2_formulation_str))
-    sigma_guess = np.array([[2.256625, 0],[0, 3.569796]]) # Extracted from previous runs
+    sigma_guess = np.ones((K2,K2)) 
     sigma_lb = np.eye(K2) * 0
     sigma_ub = np.eye(K2) * 10
     
-    # Set up the agent formulation
+    # If we are using agent data, set up the agent formulation
     if agent_data is not None:
-        agent_formulation_str = '0+hh_income_medium+hh_income_high' # Excluding the low income moment because this is baseline
+        # Initial agent formulation using dummies for income category. Low income is excluded, as baseline
+        # agent_formulation_str = '0+hh_income_medium+hh_income_high' 
+
+        # Alternative agent formulation using income-specific price sensitivites
+        agent_formulation_str = "1 + I(hh_income_low/income) + I(hh_income_medium/income) + I(hh_income_high/income)"
         agent_formulation = pyblp.Formulation(agent_formulation_str)
-        D = len(agent_formulation_str.split('+'))- (1 * ('0' in agent_formulation_str))
-        initial_pi = np.array([[0, 0],[0.2718226,1.647451]]) # Extracted from previous runs
+        D = len(agent_formulation_str.split('+')) - (1 * ('0' in agent_formulation_str))
+        initial_pi = np.ones((D, D)) # Extracted from previous runs
         pi_ub = np.ones((K2,D))*20
         pi_lb = np.ones((K2,D))*-20
 
@@ -295,17 +309,6 @@ def run_rc_logit_model(rlp_df, subfolder, estimation_data_folder, agent_data = N
             df_nodes_all = pd.concat([df_nodes_all,df_market], ignore_index=True)
         agent_data = pd.concat([agent_data.drop(['weights'],axis=1).reset_index(drop=True),df_nodes_all],axis=1)
 
-    # Load weighting matrix - Note that this was only a hack to skip pre-computation of the weighting matrix
-    # When running with micro-moments. This takes a long time so I thought I would load a previous weighting matrix
-    # (That was of a different size and expand it). Safe to say that doesn't help much. Don't do it.
-    if False:
-        with open(w_mat_str, 'rb') as f:
-            w_mat = pickle.load(f)
-        w_mat = w_mat.updated_W
-        w_mat = np.append(w_mat, w_mat[62:, :], axis = 0) # Add the last row to the bottom
-        w_mat = np.append(w_mat, w_mat[:, [62]], axis = 1)
-
-
     # Problem and optimizer
     if agent_data is not None:
         mc_problem = pyblp.Problem(product_formulations, rlp_df, agent_data=agent_data, agent_formulation=agent_formulation)
@@ -316,11 +319,28 @@ def run_rc_logit_model(rlp_df, subfolder, estimation_data_folder, agent_data = N
 
     # Add micro-moments, if included
     if use_micro_moments:
-        # Get index of broad EV data
-        broad_ev_index = X2_formulation_str.split('+').index('broad_ev_nohybrid')
-        assert(broad_ev_index == 1)
+        # Get micro-moment values from the micro-moment data
         micro_statistics = pd.read_csv(str_micro_moments)
         micro_statistic_val = micro_statistics.loc[micro_statistics["micro_moment"]=="P(SC = Broad EV | FC = Broadly EV)", "value"].values[0]
+        med_inc_mm_value = micro_statistics.loc[micro_statistics["micro_moment"]=="P(FC = Broad EV | Income = medium)", "value"].values[0]
+        high_inc_mm_value = micro_statistics.loc[micro_statistics["micro_moment"]=="P(FC = Broad EV | Income = high)", "value"].values[0]
+        low_inc_spec_value = micro_statistics.loc[micro_statistics["micro_moment"]=="E[Purchase Price | Income = low]", "value"].values[0]
+        med_inc_spec_value = micro_statistics.loc[micro_statistics["micro_moment"]=="E[Purchase Price | Income = medium]]", "value"].values[0]
+        high_inc_spec_value = micro_statistics.loc[micro_statistics["micro_moment"]=="E[Purchase Price | Income = high]", "value"].values[0]
+
+        # Get index of broad EV data
+        broad_ev_index = X2_formulation_str.split('+').index('broad_ev_nohybrid')
+        prices_index = X2_formulation_str.split('+').index('prices')
+        assert(broad_ev_index == 1)
+
+        # Get index of income data
+        low_income_index = agent_formulation_str.split('+').index('hh_income_low') - (1*('0' in agent_formulation_str))
+        medium_income_index = agent_formulation_str.split('+').index('hh_income_medium') - (1*('0' in agent_formulation_str))
+        high_income_index = agent_formulation_str.split('+').index('hh_income_high')- (1*('0' in agent_formulation_str))
+
+        # Define the anonymous functions for computing the ratio and its gradient
+        compute_ratio = lambda v: v[0] / v[1] 
+        compute_ratio_gradient = lambda v: [1 / v[1], -v[0] / v[1]**2]
 
         # Set up micro_dataset
         micro_dataset = pyblp.MicroDataset(
@@ -328,40 +348,33 @@ def run_rc_logit_model(rlp_df, subfolder, estimation_data_folder, agent_data = N
             observations = 69528, # Total observations in 2018-2022 for New England
             compute_weights=lambda t, p, a: np.ones((n_agent, p.size, p.size))
         )
+        micro_moments = []
 
-        # Define the first MicroPart for first and second choices being an EV
-        sc_ev_part = pyblp.MicroPart(
-            name="E[broad_ev_1 * broad_ev_2]",
-            dataset=micro_dataset,
-            compute_values = lambda t,p,a: np.einsum('i,j,k->ijk', np.ones(n_agent), p.X2[:, broad_ev_index], p.X2[:, broad_ev_index])  
-        )
+        if "second_choices" in micro_moments_to_include:
+            # Define the first MicroPart for first and second choices being an EV
+            sc_ev_part = pyblp.MicroPart(
+                name="E[broad_ev_1 * broad_ev_2]",
+                dataset=micro_dataset,
+                compute_values = lambda t,p,a: np.einsum('i,j,k->ijk', np.ones(n_agent), p.X2[:, broad_ev_index], p.X2[:, broad_ev_index])  
+            )
 
-        # Define the second MicroPart for first choice being an EV
-        ev_part = pyblp.MicroPart(
-            name="E[broad_ev_1]",
-            dataset=micro_dataset,
-            compute_values=lambda t,p,a: np.einsum('i,j,k->ijk',np.ones(n_agent), p.X2[:, broad_ev_index], p.X2[:, 0])
-        )
+            # Define the second MicroPart for first choice being an EV
+            ev_part = pyblp.MicroPart(
+                name="E[broad_ev_1]",
+                dataset=micro_dataset,
+                compute_values=lambda t,p,a: np.einsum('i,j,k->ijk',np.ones(n_agent), p.X2[:, broad_ev_index], p.X2[:, 0])
+            )
 
-        # Define the anonymous functions for computing the ratio and its gradient
-        compute_ratio = lambda v: v[0] / v[1] 
-        compute_ratio_gradient = lambda v: [1 / v[1], -v[0] / v[1]**2]
-
-        sc_micro_moment = pyblp.MicroMoment(name="E[broad_ev_2 | broad_ev_1]", 
-                            value=float(micro_statistic_val),
-                            parts=[sc_ev_part, ev_part],
-                            compute_value=compute_ratio,
-                            compute_gradient=compute_ratio_gradient,
+            sc_micro_moment = pyblp.MicroMoment(name="E[broad_ev_2 | broad_ev_1]", 
+                                value=float(micro_statistic_val),
+                                parts=[sc_ev_part, ev_part],
+                                compute_value=compute_ratio,
+                                compute_gradient=compute_ratio_gradient,
                             )
-        
-
-        if agent_data is not None:
-            medium_income_index = agent_formulation_str.split('+').index('hh_income_medium') - (1*('0' in agent_formulation_str))
-            high_income_index = agent_formulation_str.split('+').index('hh_income_high')- (1*('0' in agent_formulation_str))
-
-            med_inc_mm_value = micro_statistics.loc[micro_statistics["micro_moment"]=="P(FC = Broad EV | Income = medium)", "value"].values[0]
-            high_inc_mm_value = micro_statistics.loc[micro_statistics["micro_moment"]=="P(FC = Broad EV | Income = high)", "value"].values[0]
-
+            
+            micro_moments = micro_moments + [sc_micro_moment]
+            
+        if "income_specific_EV_tastes" in micro_moments_to_include:
             # We calculate additional micro moments on income
             med_inc_numerator = pyblp.MicroPart(
                 name="E[broad_ev * medium_income]",
@@ -400,15 +413,67 @@ def run_rc_logit_model(rlp_df, subfolder, estimation_data_folder, agent_data = N
                             compute_value=compute_ratio,
                             compute_gradient=compute_ratio_gradient,
                             )
+        
+            micro_moments = micro_moments + [medinc_micro_moment, highinc_micro_moment]
+            
+        if "income_specific_price_sensitivities" in micro_moments_to_include:
+            # Define micro-moments used to pin-down income-specific price sensitivities
+            low_inc_spec_numerator = pyblp.MicroPart(
+                name="E[prices * low_income]",
+                dataset=micro_dataset,
+                compute_values = lambda t, p, a: np.outer(a.demographics[:, low_income_index], 
+                                                                    p.X2[:, prices_index]))
+            med_inc_spec_numerator = pyblp.MicroPart(
+                name="E[prices * medium_income]",
+                dataset=micro_dataset,
+                compute_values = lambda t, p, a: np.outer(a.demographics[:, medium_income_index], 
+                                                                    p.X2[:, prices_index]))
+            high_inc_spec_numerator = pyblp.MicroPart(
+                name="E[prices * high_income]",
+                dataset=micro_dataset,
+                compute_values = lambda t, p, a: np.outer(a.demographics[:, high_income_index], 
+                                                                    p.X2[:, prices_index]))
+            low_inc_spec_denom = pyblp.MicroPart(
+                            name = "E(low_income)",
+                            dataset = micro_dataset,
+                            compute_values = lambda t, p, a: np.outer(a.demographics[:, low_income_index], 
+                                                                    p.X2[:,0]))
+            med_inc_spec_denom = pyblp.MicroPart(
+                            name = "E(medium_income)",
+                            dataset = micro_dataset,
+                            compute_values = lambda t, p, a: np.outer(a.demographics[:, medium_income_index], 
+                                                                    p.X2[:,0]))
+            high_inc_spec_denom = pyblp.MicroPart(
+                            name = "E(high_income)",
+                            dataset = micro_dataset,
+                            compute_values = lambda t, p, a: np.outer(a.demographics[:, high_income_index], 
+                                                                    p.X2[:,0]))
+            low_inc_spec_moment = pyblp.MicroMoment(name="E[prices | low_income]",
+                            value=0,
+                            parts=[low_inc_spec_numerator, low_inc_spec_denom],
+                            compute_value=compute_ratio,
+                            compute_gradient=compute_ratio_gradient)
+            med_inc_spec_moment = pyblp.MicroMoment(name="E[prices | medium_income]",
+                            value=0,
+                            parts=[med_inc_spec_numerator, med_inc_spec_denom],
+                            compute_value=compute_ratio,
+                            compute_gradient=compute_ratio_gradient)
+            high_inc_spec_moment = pyblp.MicroMoment(name="E[prices | high_income]",
+                            value=0,
+                            parts=[high_inc_spec_numerator, high_inc_spec_denom],
+                            compute_value=compute_ratio,
+                            compute_gradient=compute_ratio_gradient)
 
+            micro_moments = micro_moments + [low_inc_spec_moment, med_inc_spec_moment, high_inc_spec_moment]
 
         # Define the micro-moments
-        micro_moments = [
-            sc_micro_moment
-        ]
+        # micro_moments = [
+        #     sc_micro_moment
+        # ]
+        # if agent_data is not None:
+        #     micro_moments = micro_moments + [medinc_micro_moment, highinc_micro_moment]
 
-        if agent_data is not None:
-            micro_moments = micro_moments + [medinc_micro_moment, highinc_micro_moment]
+        logging.info(f"Micro Moments: {micro_moments}")
 
 
     # Log this
@@ -428,16 +493,13 @@ def run_rc_logit_model(rlp_df, subfolder, estimation_data_folder, agent_data = N
     # Solve
     if agent_data is not None:
         if use_micro_moments:
-            print("Here")
             results1 = mc_problem.solve(sigma=sigma_guess,sigma_bounds=(sigma_lb,sigma_ub),
                                             pi = initial_pi,pi_bounds=(pi_lb, pi_ub),
                                             optimization=optim,iteration=iter, method = gmm_rounds, micro_moments = micro_moments)
-            results1.to_pickle(f'outputs_rand_coeffs_agent_2.pkl')
         else:
             results1 = mc_problem.solve(sigma=sigma_guess,sigma_bounds=(sigma_lb,sigma_ub),
                                             pi = initial_pi,pi_bounds=(pi_lb, pi_ub),
                                             optimization=optim,iteration=iter, method = gmm_rounds)
-
     else:
         if use_micro_moments:
             results1 = mc_problem.solve(sigma=sigma_guess,sigma_bounds=(sigma_lb,sigma_ub), optimization=optim,iteration=iter, method = gmm_rounds, micro_moments = micro_moments)
@@ -445,9 +507,7 @@ def run_rc_logit_model(rlp_df, subfolder, estimation_data_folder, agent_data = N
             results1 = mc_problem.solve(sigma=sigma_guess,sigma_bounds=(sigma_lb,sigma_ub), optimization=optim,iteration=iter, method = gmm_rounds)
 
     if True:
-        results1.to_pickle(f'outputs_rand_coeffs_{rlp_market}_{date_time}_agent_2.pkl')
-        with open(subfolder / f'outputs_rand_coeffs_{rlp_market}_{date_time}_agent.pkl', 'wb') as f:
-                pickle.dump(results1, f)
+        results1.to_pickle(subfolder / f'outputs_rand_coeffs_{rlp_market}_{date_time}_agent.pkl')
 
 
     if False:
@@ -506,7 +566,8 @@ agent_data = agent_data.loc[(agent_data["year"]>2017)&(agent_data["year"]!=2023)
 # run_rc_logit_model(rlp_mkt_data, output_subfolder, estimation_data_subfolder, use_micro_moments = False, agent_data=agent_data)
 
 # Run the random coefficients logit model with micro moments, with agent data
-run_rc_logit_model(rlp_mkt_data, output_subfolder, estimation_data_subfolder, use_micro_moments = True, agent_data=agent_data)
+run_rc_logit_model(rlp_mkt_data, output_subfolder, estimation_data_subfolder, use_micro_moments = True, agent_data=agent_data, 
+                   micro_moments_to_include=["income_specific_price_sensitivities"])
 
 # Run the logit model
 # run_logit_model(exp_mkt_data, rlp_mkt_data, output_subfolder, estimation_data_subfolder, myear = "all_years")
