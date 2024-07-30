@@ -62,7 +62,7 @@ estimation_test = str_data / "estimation_data_test"
 # New 05/23/2024 - Dropped anything with less than 50 sales and added incentives
 # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240523_133138_no_lease_zms.csv"
 str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240523_154006_no_lease_zms.csv" # threshold to 20
-str_micro_moments = str_data / "micro_moment_data" / "micro_moments_20240703.csv"
+str_micro_moments = str_data / "micro_moment_data" / "micro_moments_20240729.csv"
 str_charging_density = str_data / "charging_stations_output" / "charging_stations_extended.csv"
 str_pop_density = str_data / "other_data" / "population_by_year_counties.csv"
 
@@ -273,9 +273,9 @@ def run_rc_logit_model(rlp_df,
     # Set up Sigma - this is random heterogeneity that is unrelated to agent data
     # Sigma is a K2 x K2 matrix, where K2 is the number of non-linear product characteristics
     K2 = len(X2_formulation_str.split('+')) - (1 * ('0' in X2_formulation_str))
-    sigma_guess = np.ones((K2,K2)) 
-    sigma_lb = np.eye(K2) * 0
-    sigma_ub = np.eye(K2) * 10
+    sigma_guess = np.zeros((K2,K2))  # Setting guess to zero means these will be fixed at zero
+    sigma_lb = np.zeros((K2, K2))
+    sigma_ub = np.zeros((K2, K2))
     
     # If we are using agent data, set up the agent formulation
     if agent_data is not None:
@@ -283,12 +283,19 @@ def run_rc_logit_model(rlp_df,
         # agent_formulation_str = '0+hh_income_medium+hh_income_high' 
 
         # Alternative agent formulation using income-specific price sensitivites
-        agent_formulation_str = "1 + I(hh_income_low/income) + I(hh_income_medium/income) + I(hh_income_high/income)"
+        agent_formulation_str = "1 + I(hh_income_low/income) + I(hh_income_medium/income) + I(hh_income_high/income) + hh_income_low + hh_income_medium + hh_income_high"
         agent_formulation = pyblp.Formulation(agent_formulation_str)
+
+        # Set up Pi. Pi must be a K2 x D matrix, where D is the number of agent characteristics. 
         D = len(agent_formulation_str.split('+')) - (1 * ('0' in agent_formulation_str))
-        initial_pi = np.ones((D, D)) # Extracted from previous runs
-        pi_ub = np.ones((K2,D))*20
-        pi_lb = np.ones((K2,D))*-20
+        initial_pi = np.ones((K2, D)) * -10
+
+        # We must now zero-out the interactions that we do not want to estimate.
+        initial_pi[0,:] = 0 
+        initial_pi[1, 4:]= 0 # Set these elements to zero
+        initial_pi[1, 0] = 0 # Set Prices:1 interaction to 0
+        pi_ub = np.zeros((K2,D))
+        pi_lb = np.ones((K2,D))*-20 # All of these interactions should be negative (sensitivity to prices should be negative)
 
     # Integration
     if(integ in ['monte_carlo','halton','mlhs','lhs']):
@@ -298,7 +305,7 @@ def run_rc_logit_model(rlp_df,
     
     # Get the nodes for the agent data
     if agent_data is not None:
-        n_nodes = K2  # <- This should be equal to K2
+        n_nodes = K2 
         df_nodes_all = pd.DataFrame()
         # generate nodes using pyblp integration tools
         for mkt_id in agent_data.market_ids.unique():
@@ -325,29 +332,37 @@ def run_rc_logit_model(rlp_df,
         med_inc_mm_value = micro_statistics.loc[micro_statistics["micro_moment"]=="P(FC = Broad EV | Income = medium)", "value"].values[0]
         high_inc_mm_value = micro_statistics.loc[micro_statistics["micro_moment"]=="P(FC = Broad EV | Income = high)", "value"].values[0]
         low_inc_spec_value = micro_statistics.loc[micro_statistics["micro_moment"]=="E[Purchase Price | Income = low]", "value"].values[0]
-        med_inc_spec_value = micro_statistics.loc[micro_statistics["micro_moment"]=="E[Purchase Price | Income = medium]]", "value"].values[0]
+        med_inc_spec_value = micro_statistics.loc[micro_statistics["micro_moment"]=="E[Purchase Price | Income = medium]", "value"].values[0]
         high_inc_spec_value = micro_statistics.loc[micro_statistics["micro_moment"]=="E[Purchase Price | Income = high]", "value"].values[0]
 
         # Get index of broad EV data
-        broad_ev_index = X2_formulation_str.split('+').index('broad_ev_nohybrid')
-        prices_index = X2_formulation_str.split('+').index('prices')
-        assert(broad_ev_index == 1)
-
-        # Get index of income data
-        low_income_index = agent_formulation_str.split('+').index('hh_income_low') - (1*('0' in agent_formulation_str))
-        medium_income_index = agent_formulation_str.split('+').index('hh_income_medium') - (1*('0' in agent_formulation_str))
-        high_income_index = agent_formulation_str.split('+').index('hh_income_high')- (1*('0' in agent_formulation_str))
+        if 'broad_ev_no_hybrid' in X2_formulation_str.split(' + '):
+            broad_ev_index = X2_formulation_str.split(' + ').index('broad_ev_no_hybrid')
+        if 'prices' in X2_formulation_str.split(' + '):
+            prices_index = X2_formulation_str.split(' + ').index('prices')
+        
+        # Get index of income dummies in the agent data
+        low_income_index = agent_formulation_str.split(' + ').index('hh_income_low') - (1*('0' in agent_formulation_str))
+        medium_income_index = agent_formulation_str.split(' + ').index('hh_income_medium') - (1*('0' in agent_formulation_str))
+        high_income_index = agent_formulation_str.split(' + ').index('hh_income_high')- (1*('0' in agent_formulation_str))
 
         # Define the anonymous functions for computing the ratio and its gradient
         compute_ratio = lambda v: v[0] / v[1] 
         compute_ratio_gradient = lambda v: [1 / v[1], -v[0] / v[1]**2]
 
-        # Set up micro_dataset
-        micro_dataset = pyblp.MicroDataset(
-            name = "InMoment", # Observations for all years, filtered for CT only
-            observations = 69528, # Total observations in 2018-2022 for New England
-            compute_weights=lambda t, p, a: np.ones((n_agent, p.size, p.size))
-        )
+        if "second_choices" in micro_moments_to_include:
+            # Set up micro_dataset
+            micro_dataset = pyblp.MicroDataset(
+                name = "InMoment", # Observations for all years, filtered for CT only
+                observations = 69528, # Total observations in 2018-2022 for New England
+                compute_weights=lambda t, p, a: np.ones((n_agent, p.size, p.size))
+            )
+        else:
+            micro_dataset = pyblp.MicroDataset(
+                name = "InMoment", # Observations for all years, filtered for CT only
+                observations = 69528, # Total observations in 2018-2022 for New England
+                compute_weights=lambda t, p, a: np.ones((n_agent, p.size)))
+            
         micro_moments = []
 
         if "second_choices" in micro_moments_to_include:
@@ -449,29 +464,22 @@ def run_rc_logit_model(rlp_df,
                             compute_values = lambda t, p, a: np.outer(a.demographics[:, high_income_index], 
                                                                     p.X2[:,0]))
             low_inc_spec_moment = pyblp.MicroMoment(name="E[prices | low_income]",
-                            value=0,
+                            value= 29.76926, # low_inc_spec_value
                             parts=[low_inc_spec_numerator, low_inc_spec_denom],
                             compute_value=compute_ratio,
                             compute_gradient=compute_ratio_gradient)
             med_inc_spec_moment = pyblp.MicroMoment(name="E[prices | medium_income]",
-                            value=0,
+                            value= 33.0288, # med_inc_spec_value
                             parts=[med_inc_spec_numerator, med_inc_spec_denom],
                             compute_value=compute_ratio,
                             compute_gradient=compute_ratio_gradient)
             high_inc_spec_moment = pyblp.MicroMoment(name="E[prices | high_income]",
-                            value=0,
+                            value= 37.4109, #high_inc_spec_value
                             parts=[high_inc_spec_numerator, high_inc_spec_denom],
                             compute_value=compute_ratio,
                             compute_gradient=compute_ratio_gradient)
 
             micro_moments = micro_moments + [low_inc_spec_moment, med_inc_spec_moment, high_inc_spec_moment]
-
-        # Define the micro-moments
-        # micro_moments = [
-        #     sc_micro_moment
-        # ]
-        # if agent_data is not None:
-        #     micro_moments = micro_moments + [medinc_micro_moment, highinc_micro_moment]
 
         logging.info(f"Micro Moments: {micro_moments}")
 
