@@ -1,4 +1,5 @@
 """This file is used to generate instruments for the estimation.
+
 In particular, we seek to generate Bartik instruments that consider both
 the density of retail establishments (at one point in time) and the sum
 of chargers in other counties except the county in question, for any given year.
@@ -7,6 +8,9 @@ In each case, we multiply the number of L2 or DC chargers in every county except
 by the retail density of that county at some point in time. We consider two metrics of retail density
 - A measure of retail density based on Advan data from 2020 (that we call "current" retail density)
 - A measure of retail density based on Dun & Bradstreet data from 1969 (that we call "historic" retail density)
+
+The Dun & Bradstreet retail density data is generated in the file generate_historic_retail_density_db1969.py
+The raw data used is to be found under "historical_data/DB business data" in the data folder.
 """
 from paths import data_dir
 import pandas as pd
