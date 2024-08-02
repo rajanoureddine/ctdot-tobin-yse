@@ -1,10 +1,13 @@
 ####################################################################################################
-# Finalize the RLP data.
-# Our input is ct_decoded_full_attributes.csv which is produced by merge_SP_policy_data.R
-# (Note: Haven't finished converting the R code to Python yet)
-# We merge the RLP data with the energy data and calculate the dollar per mile for each vehicle
-# We then save the final data to rlp_with_dollar_per_mile.csv
-# We also calculate log horsepower to weight
+"""
+Finalize the RLP data, by adding energy prices.
+Our input is ct_decoded_full_attributes.csv which is produced by merge_SP_policy_data.R
+(Note: We have not converted the R code to Python. We use the CSV file as raw input.)
+
+- Calculate log horsepower to weight
+- Merge the RLP data with the energy data and calculate the dollar per mile for each vehicle
+- Save the final data to rlp_with_dollar_per_mile.csv
+"""
 
 ####################################################################################################
 # Sources

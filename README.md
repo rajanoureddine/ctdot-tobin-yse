@@ -8,8 +8,19 @@ This directory contains code used in the Tobin Center's / Ken Gillingham's proje
 
 
 # Code
+
 ## logit_data_prep
 Files in this directory are used to clean and prepare data for BLP model estimation. The folder contains the following main files.
+* Prepare RL Polk vehicle sales data and vehicle characteristics
+    * `rlp_prep_eergy_prices.py`
+    * `rlp_finalize_data.py`
+    * `rlp_group_data.py`
+* Prepare other data involved in estimation
+    * `prepare_micro_moments.py`
+    * `prepare_hh_data.py`
+    * `get_firm_ids.py`
+* Prepare data for estimating n
+    * `prepare_charging_data.py`
 
 ### rlp_prep_energy_prices.py
 This file is used to clean and process raw energy price data, that is then used in calculating the operating cost (variable: `dollar_per_mile`) of individual vehicles used in the BLP estimation.
@@ -57,7 +68,13 @@ The main input is `rlp_with_dollar_per_mile.csv`.
 
 The main output is `rlp_with_dollar_per_mile_replaced_myear_county_{date_time}_{lease}_zms.csv`. 
 
-For example: `rlp_with_dollar_per_mile_replaced_myear_county_20240523_154006_no_lease_zms.csv` (the `no_lease` part indicates that we have dropped leased vehicles from the RLP data). This is the latest data being used in the estimation as at 08/01/2024. 
+For example: `rlp_with_dollar_per_mile_replaced_myear_county_20240523_154006_no_lease_zms.csv` (the `no_lease` part indicates that we have dropped leased vehicles from the RLP data). This is the latest data being used in the estimation as at 08/01/2024.
+
+**Choice of market definition**
+A market is a $(\text{model year} \times \text{county})$ combination. In a previous version, we attempted aggregating to the zip code level, but ended up with too many zero market shares. There are ~250 zip codes in CT, and ~5 model years. This gives us ~1250 markets, with ~200 products each, for a total of ~250,000 product-market combinations. This is too many, and leads to a large number of zero market shares.
+
+**Structure of the code**
+In the first half of the code, we define the main functions to be used, function by function. The latter half of the code runs the functions in order, and produces intermediate and final outputs. 
 
 **Methodology Notes**
 
@@ -79,7 +96,9 @@ Firstly, we identify the most common trim for each make and model.
 3. In `replace_with_most_common_trim` we go back through the original file, and for each row, we replace the features with those produced in `get_most_common_trim_features`. The output of this function is a DataFrame that is of the *same length as the input* and has the *same number of sales* as the input, but in which each the data in each row has been changed:
     * The make, model, trim will be associated with the most common trim for that make and model. If the trim is already the most popular trim, it won't be changed.
     * The features for that make, model, trim, model_year will be those of the most common trim + model year (according to methodology above).
-4. In `aggregate_to_market` we take the raw dataframe (with trims and features replaced), and aggregate them for estimation. We aggregate either to the model year, or to the model year and county. 
+4. In `aggregate_to_market` we take the raw dataframe (with trims and features replaced), and aggregate them for estimation. Note that this function produces two outputs:
+    * An output where sales are aggregated to the `model_year` only. 
+    * An output where sales are aggregated to $(\text{Model year} \times \text{County})$ combinations. 
 5. In `rationalize_markets` we drop uncommon products and add zero market shares where needed
     * We first drop vehicles with a low number of sales for any model year. We aggregate *across geographies* (for example, take the sum for all of CT), and drop vehicles below a threshold.
     * However, if the vehicle crosses the threshold, we *assume it was sold in all geographies for that model year*. For example, if we set the threshold as 20, we assume that any vehicle that sold more than 20 units in that model year *must have been available in all counties*. Consequently, if it is not observed for a given county, we create a new observation with zero sales. 

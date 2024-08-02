@@ -84,7 +84,6 @@ def get_most_common_trim(df, sales_col, separate_electric = True):
 
     return most_common_trim
 
-# Step 2: Calculate the features for each of these products.
 def get_most_common_trim_features(df, most_common_trims):
     """
     Get the features for the most common trim for each make and model.
@@ -268,14 +267,13 @@ def rationalize_markets(df, geographies, threshold, most_common_trim_features):
 
     # Get the frequency of products per market year, and remove those below the threshold 
     vars_group_on = ["make", "model", "trim", "fuel", "range_elec"]
-    vehs_to_keep = df[vars_group_on+["model_year", "veh_count"]].groupby(vars_group_on).sum().reset_index()
-    assert(vehs_to_keep["veh_count"].sum() = df["veh_count"].sum())
-    vehs_to_keep = vehs_to_keep.loc[vehs_to_keep["veh_count"] > threshold, vars_group_on] # Drop veh_count
-
+    vehs_to_keep = df[vars_group_on+["veh_count", "model_year"]].groupby(vars_group_on + ["model_year"]).sum().reset_index()
+    assert(vehs_to_keep["veh_count"].sum() == df["veh_count"].sum())
+    vehs_to_keep = vehs_to_keep.loc[vehs_to_keep["veh_count"] > threshold, vars_group_on + ["model_year"]]
 
     # For the model year and county dataset, we:
     # 1) Keep only the products with sales above the threshold for that model year - keeping the features columns
-    output = df.merge(vehs_to_keep, on=vars_group_on, how="inner")
+    output = df.merge(vehs_to_keep, on=vars_group_on + ["model_year"], how="inner")
 
     # 2) Add zero market shares for products available in one county in a year but not in another
     # First, get the unique geographies, and then for every model year, get every county it should be in
@@ -334,10 +332,10 @@ print("Aggregating to the market level...")
 aggregated = aggregate_to_market(df_replaced, most_common_trim_features)
 
 print("Rationalizing markets and addressing zero market shares...")
-aggregated_counties_zms = rationalize_markets(aggregated, "county_name", threshold, most_common_trim_features)
+aggregated_zms = rationalize_markets(aggregated, "county_name", threshold, most_common_trim_features)
 
 # Save the outputs
-aggregated_counties_zms.to_csv(rationalized_my_ct_dest)
+aggregated_zms.to_csv(rationalized_my_ct_dest)
 
 
 
