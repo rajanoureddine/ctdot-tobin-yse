@@ -19,8 +19,12 @@ Files in this directory are used to clean and prepare data for BLP model estimat
     * `prepare_micro_moments.py`
     * `prepare_hh_data.py`
     * `get_firm_ids.py`
-* Prepare data for estimating n
+* Prepare data for estimating network effects, including instruments
     * `prepare_charging_data.py`
+    * `generate_instruments.py`:
+    * `generate_historic_retail_density_db1969.py`
+    * `prep_cbp.py`: An incomplete being developed to process data from the 1969 Early County Business Pattern Files
+    * `test_instruments.py`: Used to run simple First-stage OLS testing on generated instruments
 
 ### rlp_prep_energy_prices.py
 This file is used to clean and process raw energy price data, that is then used in calculating the operating cost (variable: `dollar_per_mile`) of individual vehicles used in the BLP estimation.
