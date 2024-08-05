@@ -2,9 +2,13 @@
 
 # Code
 This folder contains
-**Data preparation:** Code to extract and prepare data for the optimization model. Note that as of 08/24 we have not identified appropriate data to estimate the model. Ideally, we would find data on the usage of individual charging stations, including *where users are coming from*. We have not yet identified such data.
-* `advan_data_for_optimization.py` downloads Point of Interest (POI) data from Advan, in order to check whether it is appropriate for our needs. (Note: it is not)
-* `numerator_data` and `numerator_data_charging`: Extracts data from the Numerator dataset to determine whether it is suitable for our needs (it is not). 
+
+* **Data preparation:** Code to extract and prepare data for the optimization model. Note that as of 08/24 we have not identified appropriate data to estimate the model. Ideally, we would find data on the usage of individual charging stations, including *where users are coming from*. We have not yet identified such data.
+    * `advan_data_for_optimization.py` downloads Point of Interest (POI) data from Advan, in order to check whether it is appropriate for our needs. (Note: it is not)
+    * `numerator_data` and `numerator_data_charging`: Extracts data from the Numerator dataset to determine whether it is suitable for our needs (it is not). 
+* **Experiments with different route-finding algorithms and objective functions**
+    * `corner_solutions.py`: A very simple script that shows how using a linear objective function leads to corner solutions (i.e., users choose to charge on every link they pass through, or choose to never charge - rather than choosing to sometimes charge, and sometimes not charge). 
+    * 
 
 
 ## corner_solutions.py
@@ -30,20 +34,18 @@ Thus, the road network looks something like this image. In the image, we have th
 * Link 5: Cost 15, boost of 10 (this is a charging link)
 
 The objective function is either linear or non-linear. In the linear case, the cost at the end of the trip is:
-$$
-\alpha_1(\text{Total cost}) - \alpha_2(\text{Remaining constraint})
-$$
+$\alpha_1(\text{Total cost}) - \alpha_2(\text{Remaining constraint})$
 
 In the non-linear case, the cost at the end of the trip is:
-$$
-\alpha_1(\text{Total cost}) - \alpha_2(\sqrt{\text{Remaining constraint}})
-$$
+$\alpha_1(\text{Total cost}) - \alpha_2(\sqrt{\text{Remaining constraint}})$
 
 This code shows how the user would choose an optimal route, for different values of $\alpha_1$ and $\alpha_2$, and for a nonlinear or linear objective function.
 
 **Result:** The code shows that when we use a linear cost function, we end up with all corner solutions (i.e., the user chooses to charge on both occasions, or they choose to never charge). 
 
 **Implication:** We likely need to include some non-linearity in our objective function. 
+
+## network.py
 
 
 
