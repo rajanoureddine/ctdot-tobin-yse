@@ -15,7 +15,7 @@ str_weights = str_dir / "weights_adjacencies"
 # Create an output dataframe
 output = pd.DataFrame()
 
-# Set graph sizes and constraints
+# Set graph sizes and constraints. Note that the actual number of nodes is size**2
 sizes = [5, 10, 15, 20, 25]
 
 # Set number of iterations for each size
@@ -23,14 +23,17 @@ iterations = 10
 
 # Loop through the sizes
 for size in tqdm(sizes):
-    # Set the source and destination for the test
+    # Set the source and destination for the test, the destination is the last node
     src = 0
     dest = size**2-1
 
     # Iterate
     for i in tqdm(range(iterations)):
+        # Generate the graph, and add weights
         generator = AdjWeightGenerator(size)
-        generator.generate_adjacency()
+        generator.generate_adjacency(connection_probability=0.7)
+
+        # Generate the weights and make charging possible
         generator.generate_weights(charging =True)
         g = generator.load_graph(size) # Since the constraint is the same as the size, we can use the size as the constraint
         start_time = time()

@@ -1,13 +1,17 @@
+# Import the necessary libraries
 import numpy as np
-from matplotlib import pyplot as plt
-from bf_extended import GraphExtended
 import pickle
 import datetime
 from pathlib import Path
+from matplotlib import pyplot as plt
+
+# Import Extended Bellman Ford algorithm
+from bf_extended import GraphExtended
 
 class AdjWeightGenerator():
     def __init__(self, dim):
-        self.size = dim            # Number of rows and columns. Num nodes = self.size ** 2
+        # Number of rows and columns. Num nodes = self.size ** 2
+        self.size = dim            
 
         # Create the adjacency
         self.adjacency = np.zeros((self.size**2, self.size**2))
@@ -19,10 +23,12 @@ class AdjWeightGenerator():
         # Set the working directory
         self.working_dir = Path().resolve().parent / "Documents" / "tobin_working_data" / "road_networks"
     
-    def generate_adjacency(self):
+    def generate_adjacency(self, connection_probability):
         # Loop through the nodes, find their neighbours, and connect to some of them
+        # Loop through i, and j.
         for i in range(self.size**2):
             for j in range(self.size**2):
+                # Identify if i and j are neighbours.
                 row_i = i // self.size
                 col_i = i % self.size
 
@@ -37,22 +43,28 @@ class AdjWeightGenerator():
 
                 j_is_neighbour = (same_row and col_adjacent) or (same_col and row_adjacent)
 
+                # If j is a neighbour, connect it to i with probability = connection_probability
                 if j_is_neighbour:
-                    self.adjacency[i, j] = np.random.choice([0,1], 1, p=[0.3, 0.7])[0]
+                    self.adjacency[i, j] = np.random.choice([0,1], 1, p=[1 - connection_probability, connection_probability])[0]
         
-        # Set all diagonal elements to 0
+        # Set all diagonal elements to 0. That is, no self loops
         for i in range(self.size**2):
             self.adjacency[i,i] = 0
         
         return self.adjacency
     
-    def generate_weights(self, charging = False):
+    def generate_weights(self, charging = False, charging_probability = 0.3):
+        """
+        Generate edge weights for the graph. If charging is False, all weights are 1. That is, the 
+        time taken on any given edge is the same. If charging is True, the weights are either -1 or 1.
+        -1 indicates that the edge is a charging station, and 1 indicates that it is a road.
+        """
         for i in range(self.size**2):
             for j in range(self.size**2):
                 if not charging:
                     self.weight_matrix[i,j] = 1
                 elif charging:
-                    self.weight_matrix[i,j] = np.random.choice([-1,1], 1, p = [0.3, 0.7])[0]
+                    self.weight_matrix[i,j] = np.random.choice([-1,1], 1, p = [charging_probability, 1 - charging_probability])[0]
             
         return self.weight_matrix
 
@@ -75,8 +87,6 @@ class AdjWeightGenerator():
         # Return the graph
         return g
                         
-        
-
 
 class RoadNetwork():
     def __init__(self, dim):
@@ -95,11 +105,11 @@ class RoadNetwork():
         # Set the working directory
         self.working_dir = Path().resolve().parent / "Documents" / "tobin_working_data" / "road_networks"
 
-    def generate_adjacency(self):
-        self.adjacency = self.generator.generate_adjacency()
+    def generate_adjacency(self, connection_probability = 0.7):
+        self.adjacency = self.generator.generate_adjacency(connection_probability)
     
-    def generate_weights(self, charging = False):
-        self.weight_matrix = self.generator.generate_weights(charging = charging)
+    def generate_weights(self, charging = False, charging_probability = 0.3):
+        self.weight_matrix = self.generator.generate_weights(charging = charging, charging_probability = charging_probability)
 
     def load_graph(self, constraint):
         """Loads the graph with the adjacency data.
@@ -150,7 +160,6 @@ class RoadNetwork():
 
                     if self.weight_matrix[i,j] == 1:
                         ax.plot(x_vals, y_vals, 'o', linestyle = '-', color = 'black', alpha =0.5, zorder = 10)
-                        # ax.arrow(x, y, dx, dy, head_width = 0.1, head_length = 0.1, fc = 'black', ec = 'black', zorder = 5)
                     else:
                         ax.plot(x_vals, y_vals, linestyle = '-', color = 'green', linewidth = 4, zorder = 5)  
         
@@ -174,26 +183,12 @@ class RoadNetwork():
 if __name__ == '__main__':
     r = RoadNetwork(10)
 
-    if False:
-        date = "20240406_122037"
-        # Load the adjacency matrix weights_20240406_120730.pkl using pickle
-        with open(r.working_dir / f"adjacency_{date}.pkl", "rb") as f:
-            adjacency = pickle.load(f)
-        
-        with open(r.working_dir / f"weights_{date}.pkl", "rb") as f:
-            weights = pickle.load(f)
-
-        # Set these as the adjacency and weight matrices
-        r.adjacency = adjacency
-        r.weight_matrix = weights
-
-    if True:
-        r.generate_adjacency()
-        r.generate_weights(charging=False)
-        r.plot_network()
-        r.load_graph(10)
-        r.get_path(0, 99)
-        r.generate_weights(charging=True)
+    r.generate_adjacency(0.7)
+    r.generate_weights(charging=False)
+    r.plot_network()
+    r.load_graph(10)
+    r.get_path(0, 99)
+    r.generate_weights(charging=True, charging_probability=0.3)
 
     r.plot_network()
     r.load_graph([np.infty, 10])

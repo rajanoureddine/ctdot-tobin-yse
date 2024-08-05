@@ -11,7 +11,6 @@ class GraphExtended():
     """
 
     def __init__(self, vertices, weights, constraints):
-        # Weights is redundant - remove
         self.V = vertices   # No. of vertices
         self.graph = []     # Empty graph
         self.path = [[]] * self.V 
@@ -24,30 +23,35 @@ class GraphExtended():
         # Generate an empty path. The path to source will be the source node itself, weights = 0
         self.path[src] = [Path(src)]
 
-        # Repeat n-1 times
+        # Repeat n-1 times, where n is the number of vertices
         for m in range(self.V - 1):
+            # For each u,v edge in the graph, and the associated edge weights w 
+            # (w could be a list of weights if there are multiple metrics!)
             for u, v, w in self.graph:
+                # For each already-existing path to u, p
                 for p in self.path[u]:
                     uv = Path(u) # Create a new path that starts at u
-                    uv.addLink(u, v, w) # Add a link to v, with relevant weights
+                    uv.addLink(u, v, w) # Add a link from u to v, with relevant weights
 
-                    # New to add
-                    new_path = p + uv # Add this new route to v
+                    # Create a new path to p, that is the old path p to u, plus the extra link
+                    new_path = p + uv 
 
+                    # If the path does not exceed the constraints, and does not include repeat visits
                     if new_path.weights_leq(self.constraints) and not new_path.repeat_visits():
 
                         # If it's within the constraints, check 
                         flag = True
                         add_path_flag = True
 
-                        # If there are any existing paths to v, iterate through them. We either add the new path (keeping q),
-                        # add it dropping q, or don't add it and keep q. 
+                        # If there are any existing paths to v... 
                         if self.path[v]:
+                            # Iterate through these existing paths to see if new_path is better
                             for q in self.path[v]:
                                 # Case 0: If they are the same path, don't add a new path
                                 if new_path.path == q.path:
                                     add_path_flag = False
                                     break
+
                                 # Case 1: if q is less than new_path for the minimization metric, then we don't need to consider the new path
                                 elif (len(self.constraints) == 1) and np.less(q.weight_sum, new_path.weight_sum):
                                     flag = False
@@ -83,29 +87,6 @@ class GraphExtended():
                                 else:
                                     add_path_flag = True # We will be adding a path (we keep both paths)
 
-
-
-                            
-                                # Case 1: If q is better on every metric than new path
-                                # if np.all(np.less(q.weight_sum, new_path.weight_sum)):
-                                #    flag = False
-                                #    break # don't need to consider any more 
-
-                                # Case 2: If np is either the same as q for all metrics, less than
-                                # q for all metrics, or a mix of being the same and better
-                                # if np.all(np.less_equal(new_path.weight_sum, q.weight_sum)):
-                                #     add_path_flag = True # We will be adding a path
-                                #     
-                                #     # Case 2b: If new path is not the same for all metrics (that means
-                                #     # it's the same for some metrics, and better for others).
-                                #     # Thus we remove q
-                                #     if not np.all(np.equal(new_path.weight_sum, q.weight_sum)):
-                                #         self.path[v].remove(q)
-                                #     
-                                #     # If they're the same path, don't add a new path
-                                #     elif new_path.path == q.path:
-                                #         add_path_flag = False
-                                #         break
                                         
                         if flag == True:
                             if self.path[v] and add_path_flag and not len(self.path[v]) > 1:
@@ -140,6 +121,8 @@ class GraphExtended():
             if paths:
                 print("-------------------------------------")
 
+
+# A quick test of the implementation.
 if __name__ == '__main__':
     g = GraphExtended(8, 2, np.array([np.infty, 47]))
     for i in range(1, 4):

@@ -1,3 +1,7 @@
+"""
+Implements a path object for use in the Bellman-Ford algorithm.
+"""
+
 import numpy as np
 
 class Path:
@@ -7,6 +11,9 @@ class Path:
         self.weight_sum = 0
     
     def addLink(self, u, v, w):
+        """
+        Adds a link to the path, and updates the weight sum.
+        """
         if self.path == [u]:
             self.path = [u, v]
             self.weights = [w]
@@ -38,6 +45,8 @@ class Path:
             return False
     
     def __add__(self, p2):
+        # If the last node on the path is not the first node on the new path, raise an error
+        # That would represent jumping from one node to another without an intermediate link
         if (p2.path[0] != self.path[-1]):
             raise ValueError("You cannot do this")
         
