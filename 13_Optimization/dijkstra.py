@@ -21,6 +21,8 @@ class Graph:
         self.total_cost = []
         self.prev = []
         self.objective_type = objective
+        self.alpha1 = 0.5
+        self.alpha2 = 0.5
  
     # function to add an edge to graph
     def addEdge(self, u, v, w, b = None):
