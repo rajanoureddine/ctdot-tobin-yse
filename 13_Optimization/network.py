@@ -135,7 +135,7 @@ class RoadNetwork():
     def plot_network(self, plot_path = False, path = None):
         """Given a valid adjacency matrix, plot the network"""
 
-        fig, ax = plt.subplots(nrows = 1, ncols = 1, figsize = (10,10), facecolor = 'whitesmoke')
+        fig, ax = plt.subplots(nrows = 1, ncols = 1, figsize = (8,8), facecolor = 'whitesmoke')
 
         ax.set_xlim((-1, self.size))
         ax.set_ylim((-1, self.size))
@@ -158,24 +158,38 @@ class RoadNetwork():
                     x_vals = [i % self.size, j% self.size] 
                     y_vals = [i // self.size, j // self.size]
 
+                    # Road segments plotted in black
                     if self.weight_matrix[i,j] == 1:
-                        ax.plot(x_vals, y_vals, 'o', linestyle = '-', color = 'black', alpha =0.5, zorder = 10)
+                        ax.plot(x_vals, y_vals, 'o', linestyle = '-', color = 'black', alpha =0.5, zorder = 10, label = "Road")
+                    
+                    # Charging segments plotted in green
                     else:
-                        ax.plot(x_vals, y_vals, linestyle = '-', color = 'green', linewidth = 4, zorder = 5)  
+                        ax.plot(x_vals, y_vals, linestyle = '-', color = 'green', linewidth = 4, zorder = 5, label = "Charger") 
         
+        # If a path is provided, plot it
         if plot_path and path:
             for z in range(1, len(path)):
                 i, j = path[z-1], path[z]
                 x_vals = [i % self.size, j% self.size] 
                 y_vals = [i // self.size, j // self.size]
+                # Plot road segments taken in red
                 if self.weight_matrix[i,j] > 0:
-                    ax.plot(x_vals, y_vals, 'o', linestyle = '-', color = 'red', linewidth = 3, zorder = 15)
+                    ax.plot(x_vals, y_vals, 'o', linestyle = '-', color = 'red', linewidth = 3, zorder = 15, label = "Road (Taken)")
+                # Plot charging segments taken in purple
                 else:
-                    ax.plot(x_vals, y_vals, 'o', linestyle = '-', color = 'purple', linewidth = 3, zorder = 15)
+                    ax.plot(x_vals, y_vals, 'o', linestyle = '-', color = 'purple', linewidth = 3, zorder = 15, label = "Charger (Taken)")
             fig.suptitle(f"Path: {','.join([str(x) for x in path])}", y = 0.90)
         elif plot_path and not path:
             fig.suptitle("No solution found", fontsize = 14, y = 0.90)
-
+        elif not plot_path:
+            fig.suptitle("Road Network", fontsize = 14, y = 0.90)
+        
+        # Get axes labels
+        handles, labels = plt.gca().get_legend_handles_labels()
+        by_label = dict(zip(labels, handles))
+        fig.legend(by_label.values(), by_label.keys(), loc = 5)
+        
+        # Show
         plt.show()
 
 
@@ -183,13 +197,15 @@ class RoadNetwork():
 if __name__ == '__main__':
     r = RoadNetwork(10)
 
+    # Generate the adjacency matrix and run without charging
     r.generate_adjacency(0.7)
     r.generate_weights(charging=False)
     r.plot_network()
-    r.load_graph(10)
-    r.get_path(0, 99)
-    r.generate_weights(charging=True, charging_probability=0.3)
+    r.load_graph(10) # This is the constraint. The constraint is the maximum number of edges that can be traversed
+    r.get_path(0, 99) # This is the source and destination nodes
 
+    # Now generate the adjacency matrix and run with charging
+    r.generate_weights(charging=True, charging_probability=0.3)
     r.plot_network()
     r.load_graph([np.infty, 10])
     r.get_path(0, 99)

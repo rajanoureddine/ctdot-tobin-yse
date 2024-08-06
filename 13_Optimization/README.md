@@ -112,7 +112,20 @@ We implement two object classes:
     * Loads a `GraphExtended` instance from `bf_extended.py` with the given constraint. 
 
 `RoadNetwork`: Used to display the adjacency matrix generated above as a square road network.
-* 
+* `get_path(src, dest)` calls the BF-Extended algorithm to find a shortest path between `src` and `dest`
+* `plot_network(plot_path, path)` Plots the network given an adjacency matrix, and a path. It is designed to plot a square network with an equal number of nodes in each column and row. 
+    * Roads are plotted in black, while charging segments (i.e., segments with a negative value in the weight matrix) are plotted in green
+    * If a `path` is given, it is plotted. Where a route takes a particular road link, it is plotted in red. Where a charging link is taken, it is plotted in purple. 
+
+When run as `__main__` (i.e., when the Python file is run):
+* We create a blank Road Network
+* We generate weights (no charging), plot the network, load a graph, and show the path from beginning to end. Often without charging, it is impossible to make it from `src` to `dest`.
+* We then re-load the weights, now with charging links (shown in green) and run the algorithm again. Often it becomes possible to find a path. 
+
+Note that we save the adjacency matrix and weight matrix each time using `pickle,` so that if anything odd happens, you can pick out the same adjacency matrix and run the algorithm again. 
+
+**test_bf_extended.py**
+Generatees adjacency matrices of different sizes, with and without charging, and runs the BF algorith, on them. This shows that the time taken to find a path increases rapidly with input size. (Note that if size = 10, there are 100 nodes. If size = 25, there are 625 nodes). 
 
 
 
