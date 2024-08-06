@@ -7,7 +7,7 @@ from pathlib import Path
 
 class AdjWeightGenerator():
     def __init__(self, dim):
-        self.size = dim            # Number of rows and columns. Num nodes = self.size ** 2
+        self.size = dim           
 
         self.validlinks = {0:10, 10:11, 11:21, 21:22, 22:32, 32:33, 33:43, 43:44, 44:54, 54:55, 55:65, 65:66, 66:76, 76:77, 77:87, 87:88, 88:98, 98:99}
 
