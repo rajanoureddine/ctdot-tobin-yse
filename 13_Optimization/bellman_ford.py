@@ -11,23 +11,14 @@ class Graph:
         self.graph = []
         self.dist = []
 
-        # Define path or previous 
-        if self.weights > 1:
-            self.path = [{"path": None, "weights": []}] * self.V
-            self.path_weights = [None] * self.V
-        elif self.weights == 1:
-            self.prev = [None] * self.V
+        # Define path or previous. Note that it's possible to have more than one weight metric
+        # per link, but the rest of the code is not set up to handle that.
+        self.prev = [None] * self.V
  
     # function to add an edge to graph
     def addEdge(self, u, v, w):
-        if (not type(w) == list) and self.weights > 1:
-            raise ValueError(f"You must provide {self.weights} weights")
-        elif type(w) == list and len(w) != self.weights:
-            raise ValueError(f"You must provide {self.weights} weights")
-        else:
-            self.graph.append([u, v, w])
+        self.graph.append([u, v, w])
 
-    
     # Function to get the path to a node
     def getPath(self, node, src, path = None):
         if not path:
@@ -93,7 +84,10 @@ class Graph:
         if print:
             self.printArr(src)
  
-    def Dijkstra(self, src):
+    def Dijkstra(self, src, print = False):
+        """
+        Implementation of Dijkstra's algorithm. 
+        """
         self.dist = [float("Inf")] * self.V
         self.dist[src] = 0
 
@@ -120,20 +114,15 @@ class Graph:
                     elif dsuv == self.dist[v]:
                         if self.prev[v] is None:
                             self.prev[v] = u
+                        # We include this to allow for multiple shortest paths
                         elif type(self.prev[v]) != list:
                             self.prev[v] = sorted([self.prev[v], u])
                         else:
                             self.prev[v] = sorted(self.prev[v]+ [u])
 
-        # self.printArr(src)
+        if print:
+            self.printArr(src)
     
     def reset(self):
         self.dist = []
-
-        # Define path or previous 
-        if self.weights > 1:
-            self.path = [None] * self.V
-            self.path_weights = [None] * self.V
-        
-        elif self.weights == 1:
-            self.prev = [None] * self.V
+        self.prev = [None] * self.V
