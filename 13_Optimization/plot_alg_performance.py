@@ -1,11 +1,23 @@
+"""
+A test to compare the performance of the Bellman-Ford and Dijkstra algorithms.
+Note: We use our own implementations of each algorithm, so these may not
+be the most efficient implementations available. 
+
+We also test the performance of off-the-shelf implementations from SciPy in a separate file.
+"""
+# Import necessary libraries
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-from timeit import Timer
 import time
-from bellman_ford import Graph, Path, GraphExtended
+from dijkstra_bf_vanilla_implementations import Graph
+from pathlib import Path
 
-# Create a function to test the performance of the Bellman-Ford algorithm
+# Set working directory
+str_cwd = Path().resolve().parent.parent
+output_dir = str_cwd / "Documents" / "tobin_working_data" / "algo_tests"
+
+# A function to setup and generate a graph of a given size. 
 def setup_graph(size):
     graph_size = size
     graph = np.zeros([graph_size, graph_size])
@@ -51,11 +63,11 @@ for i in range(40, 201, 20):
     out_df = pd.concat([out_df, df]).reset_index(drop=True)
     print(f"Finished size {i}")
 
-out_df.to_csv("algo_performance.csv", index=False)
+out_df.to_csv(output_dir / "algo_performance.csv", index=False)
 
 # Group by size and get an average and standard deviation
 grouped = out_df.groupby("Size").agg(["mean", "std"])
-grouped.to_csv("algo_performance_grouped.csv")
+grouped.to_csv(output_dir / "algo_performance_grouped.csv")
 
 # Plot the results
 fig, ax = plt.subplots()

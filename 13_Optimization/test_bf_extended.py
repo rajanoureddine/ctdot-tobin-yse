@@ -1,5 +1,4 @@
 from network import *
-from bf_extended import GraphExtended
 import pandas as pd
 from time import time
 from pathlib import Path

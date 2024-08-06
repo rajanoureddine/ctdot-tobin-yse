@@ -118,7 +118,3 @@ for size in tqdm(sizes):
         # Save the output
         logging.info(f"Output for size {size} on iteration {iteration}:\n{output}")
         output.to_csv(output_dir / f"output_{date}.csv", index = False)
-
-
-    
-

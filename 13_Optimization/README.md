@@ -8,7 +8,8 @@ This folder contains
     * `numerator_data` and `numerator_data_charging`: Extracts data from the Numerator dataset to determine whether it is suitable for our needs (it is not). 
 * **Experiments with different route-finding algorithms and objective functions**
     * `corner_solutions.py`: A very simple script that shows how using a linear objective function leads to corner solutions (i.e., users choose to charge on every link they pass through, or choose to never charge - rather than choosing to sometimes charge, and sometimes not charge). 
-    * 
+    * `bf_extended.py` and `network.py`: Test the Bellman Ford - Extended algorithm, and visualize result
+    * `dijkstra_bf_vanilla_implementations.py` and `plot_alg_performance.py`: more tests, this time of vanilla implementations of Dijkstra and Bellman Ford. 
 
 
 ## corner_solutions.py
@@ -127,6 +128,17 @@ Note that we save the adjacency matrix and weight matrix each time using `pickle
 **test_bf_extended.py**
 Generatees adjacency matrices of different sizes, with and without charging, and runs the BF algorith, on them. This shows that the time taken to find a path increases rapidly with input size. (Note that if size = 10, there are 100 nodes. If size = 25, there are 625 nodes). 
 
+## dijkstra_bf_vanilla_implementations.py and plot_alg_performance.py
+Different to `network.py` and `bf_extended.py` that implement the BF Extended algorithm, `dijkstra_bf_vanilla_implementations.py` implements a vanilla version of the Bellman Ford algorithm and Dijkstra's algorithm. `plot_alg_performance.py` plots the performance of these two algorithms against once another, for different input sizes. 
 
+*Important note: `plot_alg_performance.py` only shows the performance of one implementation of the algorithm.* We also test an off-the-shelf implementation from `scipy` and find that the performance is better. These files simply show performance when the algorithms are implemented by hand. 
 
+**dijkstra_bf_vanilla_implementations.py**
+As noted. Vanilla implementations of Dijkstra's algorithm and the Bellman Ford algorithm. Do not allow for constraints, multiple weights, etc.
 
+**plot_alg_performance.py**
+A simple script written to compare the performance of the two algorithms when finding the shortest path through the same graph. We then output these to a CSV. The key result is that the time taken by the Bellman Ford algorithm appears to increase non-linearly with input size, while for Dijkstra's algorithm, the increase is linear. 
+
+![alt text](bf_vs_dijkstra.png)
+
+## test_scipy.py
