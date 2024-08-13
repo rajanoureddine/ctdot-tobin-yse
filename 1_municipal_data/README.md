@@ -37,3 +37,5 @@ This Notebook is a bit tricky to understand, but what it is doing is simple. The
 * At the end we have a set of corrected renamers and some fixed underlying files.
 * We then run a short script *using the renamer files as input* that goes through the many underlying CSVs and performs the mapping, extracting and renaming the relevant columns in that CSV to get a single file with a single set of standardized columns.
 
+
+

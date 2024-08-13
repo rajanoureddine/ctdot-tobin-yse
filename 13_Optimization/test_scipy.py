@@ -1,3 +1,7 @@
+"""
+A script to test the performance of off-the-shelf implementations of the Dijkstra and Bellman-Ford algorithms.
+"""
+# Import necessary libraries
 from network import *
 from scipy.sparse import csr_matrix, csgraph
 from scipy.sparse.csgraph import dijkstra, bellman_ford
@@ -44,6 +48,7 @@ for size in tqdm(sizes):
     logging.info(f"Testing size {size}")
     for iteration in range(iterations):
         logging.info(f"Testing iteration {iteration}")
+
         # Create a road network and adjacency
         r = RoadNetwork(size)
         r.generate_adjacency()

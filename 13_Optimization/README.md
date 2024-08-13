@@ -10,6 +10,7 @@ This folder contains
     * `corner_solutions.py`: A very simple script that shows how using a linear objective function leads to corner solutions (i.e., users choose to charge on every link they pass through, or choose to never charge - rather than choosing to sometimes charge, and sometimes not charge). 
     * `bf_extended.py` and `network.py`: Test the Bellman Ford - Extended algorithm, and visualize result
     * `dijkstra_bf_vanilla_implementations.py` and `plot_alg_performance.py`: more tests, this time of vanilla implementations of Dijkstra and Bellman Ford. 
+    * `test_scipy.py`: tests off-the-shelf implementations of the Bellman-Ford and Dijkstra's algorithm 
 
 
 ## corner_solutions.py
@@ -142,3 +143,10 @@ A simple script written to compare the performance of the two algorithms when fi
 ![alt text](bf_vs_dijkstra.png)
 
 ## test_scipy.py
+This script runs a series of tests on the performance of the Bellman Ford and Dijkstra's algorithm, however, using off-the-shelf implementations from scipy.
+
+We find that the implementations are fast and effective, and that running time of Bellman Ford does not increase as much with input size $N$, as it does for our bespoke implementations. Note that the tests are not like-for-like, since for the BF algorithm we try finding a path through a graph with some negative edge weights. Some times, no path is found, since a negative loop is identified. 
+
+However, we get all the featues we need: e.g., non-linear objective functions, constraints, multiple edge weights, etc. 
+
+Note: In order to generate random adjacency matrices, we use `network.py` and the `generate_adjacency()` method of the `RoadNetwork` class. 
