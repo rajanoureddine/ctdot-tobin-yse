@@ -1,4 +1,3 @@
-# Note: This Python file was created by using ChatGPT to convert the R code to Python code.
 # The original R code is under 00_reference_files/generated_agent_data.R
 
 # Import libraries
@@ -17,6 +16,10 @@ pd.set_option('display.max_columns', 500)
 str_cwd = pathlib.Path().resolve().parent
 str_dir = str_cwd / "Documents" / "tobin_working_data"
 ipums_dir = str_dir / "ipums_data" / "ipums_ct_all.csv"
+
+####################################################################################################
+# Choose number of agents we are running this for
+n_agents = 2000
 
 ####################################################################################################
 county_fips = {1:'FAIRFIELD',
@@ -71,6 +74,7 @@ dt_ipums.loc[:, "hhincome_categories"] = dt_ipums.loc[:, "hhincome"].apply(categ
 dt_ipums['county_name'] = dt_ipums['countyfip'].map(county_fips)
 dt_ipums = dt_ipums.dropna(subset=['county_name']) # This also drops 2022
 
+# We do not need to do this since the data extract already adjusts for CPI
 if False:
     # CPI Calculations - we base to 2010
     # Read in CPI data and convert long format
@@ -96,7 +100,6 @@ dt_ipums['college_grad'] = np.where(dt_ipums.educ.isin(['5+ years of college', '
 # Ensure only one person per household is kept
 dt_ipums = dt_ipums[dt_ipums.pernum == 1]
 
-
 # Random sampling of observations per year, considering household weights
 def generate_sample(df, N_obs, alt_2022 = False):
     unique_years_states = df[['year', 'county_name']].drop_duplicates()
@@ -105,12 +108,16 @@ def generate_sample(df, N_obs, alt_2022 = False):
     for _, row in unique_years_states.iterrows():
         year = row['year']
         county = row['county_name']
+
+        # Extract a sub-sample of the DataFrame, for the given year and county
         df_sub = df[(df.county_name == county) & (df.year == year)]
         df_sub = df_sub.drop(columns=['county_name', 'year'])
-        # Fake the year 2022
+        
+        # Fake the year 2022 - that is not in the data
         if alt_2022:
             year = 2022
         
+        # Sample with replacement, using household weights
         prob = df_sub.hhwt / df_sub.hhwt.sum()
         sample = df_sub.sample(n=N_obs, replace=True, weights=prob)
         sample['model_year'] = year
@@ -119,6 +126,7 @@ def generate_sample(df, N_obs, alt_2022 = False):
         sample["year"] = year
         samples.append(sample)
 
+    # Concatenate all samples
     result = pd.concat(samples, ignore_index=True)
 
     result = result.rename(columns = {"hhincome" : "income", "hhincome_categories":"income_category"})
@@ -130,19 +138,10 @@ def generate_sample(df, N_obs, alt_2022 = False):
     return result[['state', 'countyfip', "year", 'model_year', 'market_ids', 'income']+income_cat_dummies.columns.tolist()+['single_fam', 'urban', 'college_grad', 'weights']]
 
 # We generate for all years, and then for 2021 (that we use to replace 2022 for which we have no data)
-samples = generate_sample(dt_ipums, 750)
-samples_2022 = generate_sample(dt_ipums.loc[dt_ipums["year"]==2021], 750, alt_2022=True)
+print(f"Running for {(n_agents)}")
+samples = generate_sample(dt_ipums, n_agents)
+samples_2022 = generate_sample(dt_ipums.loc[dt_ipums["year"]==2021], n_agents, alt_2022=True)
 samples = pd.concat([samples, samples_2022], ignore_index=True)
-
-
-samples.to_csv(f"{str_dir}/ipums_data/agent_data_processed_750.csv", index=False)
-
-if False:
-    # Read and handle charging density data
-    # (Example here, assuming charging_density.csv is preprocessed and available)
-    dt_charging_density = pd.read_csv(f"{str_loc}intermediate/cd_2015_2021.csv").drop_duplicates(subset=['state', 'puma', 'year', 'charging_density_total'])
-
-    # Save output to CSV
-    dt_ipums.to_csv(f"{str_loc}intermediate/agent_data.csv", index=False)
+samples.to_csv(f"{str_dir}/ipums_data/agent_data_processed_2000.csv", index=False)
 
 

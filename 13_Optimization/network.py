@@ -198,7 +198,7 @@ if __name__ == '__main__':
     r = RoadNetwork(10)
 
     # Generate the adjacency matrix and run without charging
-    r.generate_adjacency(0.7)
+    r.generate_adjacency(connection_probability=0.8)
     r.generate_weights(charging=False)
     r.plot_network()
     r.load_graph(10) # This is the constraint. The constraint is the maximum number of edges that can be traversed
