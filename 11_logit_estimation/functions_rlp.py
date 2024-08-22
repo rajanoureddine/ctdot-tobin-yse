@@ -239,6 +239,7 @@ def clean_market_data(mkt_data, mkt_ids):
     # Get prices 
     print("Calculating prices")
     mkt_data['prices'] = mkt_data.msrp - mkt_data.fed_credit - mkt_data.state_incentive
+    # mkt_data['prices'] = mkt_data.msrp
 
     # mkt_data['time_trend'] = mkt_data.model_year - 2013
 
@@ -314,7 +315,6 @@ def generate_fuel_type_dummies(vin_data):
     print(check)
 
     return vin_data
-
 
 
 def generate_pyblp_instruments(mkt_data):

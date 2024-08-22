@@ -55,18 +55,12 @@ str_sales_vin_characteristic = str_rlp / "rlp_with_dollar_per_mile.csv"
 output_folder = str_project / str_data / "outputs"
 str_mapping = str_rlp / "brand_to_oem_generated.csv"
 estimation_test = str_data / "estimation_data_test"
-# New 05/13/2023 - #Dropped anything with less than 100 sales
-# str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240513_122046_no_lease_zms.csv"
-# New 04/13/2023 - Dropped anything with less than 50 sales
-# str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240513_142237_no_lease_zms.csv"
-# New 05/23/2024 - Dropped anything with less than 50 sales and added incentives
-# str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240523_133138_no_lease_zms.csv"
-str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240523_154006_no_lease_zms.csv" # threshold to 20
+str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240822_163435_no_lease_zms.csv" 
 str_micro_moments = str_data / "micro_moment_data" / "micro_moments_20240703.csv"
 str_charging_density = str_data / "charging_stations_output" / "charging_stations_extended.csv"
 str_pop_density = str_data / "other_data" / "population_by_year_counties.csv"
 
-if False:
+if True:
     a = 1
     # NEW
     # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240415_170934_no_lease_zms.csv" # NO LEASES + COUNTY + ZMS
@@ -328,16 +322,7 @@ agent_data = pd.read_csv(str_agent_data)
 agent_data = agent_data.loc[(agent_data["year"]>2017)&(agent_data["year"]!=2023)].reset_index(drop=True)
 
 ############################################################################################################
-# Run the random coefficients logit model with micro moments
-# run_rc_logit_model(rlp_mkt_data, output_subfolder, estimation_data_subfolder, use_micro_moments = True)
-
-# Run the random coefficients logit model without micro moments, with agent data
-# run_rc_logit_model(rlp_mkt_data, output_subfolder, estimation_data_subfolder, use_micro_moments = False, agent_data=agent_data)
-
-# Run the random coefficients logit model with micro moments, with agent data
-run_rc_logit_model(rlp_mkt_data, output_subfolder, estimation_data_subfolder, use_micro_moments = True, agent_data=agent_data)
-
 # Run the logit model
-# run_logit_model(exp_mkt_data, rlp_mkt_data, output_subfolder, estimation_data_subfolder, myear = "all_years")
+run_logit_model(exp_mkt_data, rlp_mkt_data, output_subfolder, estimation_data_subfolder, myear = "all_years")
 
 

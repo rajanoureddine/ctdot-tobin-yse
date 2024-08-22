@@ -119,6 +119,13 @@ Firstly, we identify the most common trim for each make and model.
     * However, if the vehicle crosses the threshold, we *assume it was sold in all geographies for that model year*. For example, if we set the threshold as 20, we assume that any vehicle that sold more than 20 units in that model year *must have been available in all counties*. Consequently, if it is not observed for a given county, we create a new observation with zero sales. 
     * The result of this is a dataframe in which there are different numbers of products in each model year, but the number of products is the same across counties within the same model year. (e.g. number of products for New Haven 2019 = number of products for Stamford 2019)
 
+**Outputs**
+
+Outputs are labelled, e.g. `rlp_with_dollar_per_mile_replaced_myear_county_20240523_154006_no_lease_zms.csv`. This means:
+* We've replaced products with the relevant detail for the most common trim
+* We have remeved leases
+* We have added zero market shares
+
 ## get_firm_ids.py
 A script that does almost nothing - we need firm IDs to run the estimatiion, but didn't have access to the raw file. This script accesses an output CSV and uses it to pull out a mapping of firm IDs.
 
