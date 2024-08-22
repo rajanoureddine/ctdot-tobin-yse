@@ -10,7 +10,7 @@ import re
 data_dir = Path().resolve().parent / "Documents" / "tobin_working_data" / "outputs"
 
 #### Load object
-with open(data_dir / "outputs_county_model_year_0709-0817" / "outputs_rand_coeffs_county_model_year_0709-0817_agent.pkl", "rb") as f:
+with open(data_dir / "outputs_county_model_year_0730-1327" / "outputs_rand_coeffs_county_model_year_0730-1327_agent.pkl", "rb") as f:
     results1 = pickle.load(f)
 
 

@@ -1,12 +1,12 @@
 # logit_data_prep
 Files in this directory are used to clean and prepare data for BLP model estimation. The folder contains the following main files.
 * Prepare RL Polk vehicle sales data and vehicle characteristics
-    * `rlp_prep_eergy_prices.py`
+    * `rlp_prep_energy_prices.py`
     * `rlp_finalize_data.py`
     * `rlp_group_data.py`
 * Prepare other data involved in estimation
     * `prepare_micro_moments.py`
-    * `prepare_hh_data.py`
+    * `prep_hh_data.py`
     * `get_firm_ids.py`
 * Prepare data for estimating network effects, including instruments
     * `prepare_charging_data.py`
@@ -14,6 +14,28 @@ Files in this directory are used to clean and prepare data for BLP model estimat
     * `generate_historic_retail_density_db1969.py`
     * `prep_cbp.py`: An incomplete being developed to process data from the 1969 Early County Business Pattern Files
     * `test_instruments.py`: Used to run simple First-stage OLS testing on generated instruments
+* Other files
+    * `get_firm_ids.py`: A script used only one time to extract a Firm to Firm ID mapping
+    * `paths.py`: A utility script to manage paths, again not really used
+
+## Major input/output files:
+The most important files that are input to / produced by this section are:
+
+`rlpolk_data/US_Yale_University_OP0001562727_NV_CT_VIN_Prefix_202212.txt` 
+* Raw RLPolk data used for the estimation. Contains VIN-year-month-county-zip counts of new vehicle sales for Connecticut for 2018-2022. 
+
+`rlpolk_data/ct_decoded_full_attributes.csv`
+* The same RLPolk data, that has been VIN-decoded and merged to detailed vehicle feature data, as well as subsidy and incentive data. 
+* This file is produced by two pieces of code: `decode_Polk.R`, and `merge_SP_policy_data.R`. The first file imports the raw data and decodes it using a VIN decoder, while the second merges it with policy data. The relevant scripts are contained under `00_reference_files`, but we do not run them - we treat their output as our input, directly. 
+* These files also use the DataOne VIN decoder procured by Professor Gillingham
+* Note that there are potential issues in the decoding step - for example, the RLP data comes with 11-long VINs including a check-digit, while the decoder uses 10-long VINs without a check-digit. This means there are some one-to-many matches that are dealt with in the R code. We did not address these issues as part of this work, but they don't appear to affect our results
+* This csv file was provided directly by Stephanie Weber at the University of Boulder Colorado. We have not converted `merge_SP_policy_data.R` 
+
+`rlpolk_data/rlp_with_dollar_per_mile.csv`
+* This is produced by `rlp_finalize_data.py` and includes running costs for vehicles. 
+
+`rlpolk_data/rlp_with_dollar_per_mile_replaced_myear_county_20240523_154006_no_lease_zms.csv`
+* Files of this kind (i.e., similar name with different dates) are what we use for the estimation. They are produced by `rlp_group_data.py`. The key difference is that we group products and into years/counties (see below for methodology)
 
 ## rlp_prep_energy_prices.py
 This file is used to clean and process raw energy price data, that is then used in calculating the operating cost (variable: `dollar_per_mile`) of individual vehicles used in the BLP estimation.

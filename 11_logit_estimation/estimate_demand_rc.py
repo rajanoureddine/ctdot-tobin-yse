@@ -80,7 +80,7 @@ if False:
     # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240416_141637_inc_leases_zms.csv" # LEASES + COUNTY + ZMS
     # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_20240411_183046.csv"
 
-str_agent_data = str_data / "ipums_data" / "agent_data_processed_1000.csv"
+str_agent_data = str_data / "ipums_data" / "agent_data_processed_2000.csv"
 
 # Get updated W
 w_mat_str = output_folder / "outputs_county_model_year_0601-0700" / "outputs_rand_coeffs_county_model_year_0601-0700.pkl"
@@ -241,9 +241,9 @@ def run_rc_logit_model(rlp_df,
 
     # Set up the estimation hyperparameters
     integ = 'monte_carlo'
-    n_agent = 1000
+    n_agent = 2000
     gmm_rounds = '2s'
-    sensitivity = 5e-1 # Increased this significantly. When we use gtol, this is the gradient tolerance. ftol is function tolerance. 
+    sensitivity = 1e-1 # Increased this significantly. When we use gtol, this is the gradient tolerance. ftol is function tolerance. 
 
     # Save the market data used for the estimation - to ensure that we can replicate in future if required
     rlp_df.to_csv(estimation_data_folder / f'rc_mkt_data_{rlp_market}_{date_time}.csv',index = False)
@@ -341,7 +341,7 @@ def run_rc_logit_model(rlp_df,
         if 'prices' in X2_formulation_str.split(' + '):
             prices_index = X2_formulation_str.split(' + ').index('prices')
         
-        # Get index of income dummies in the agent data
+        # Get index of income category dummies in the agent data
         low_income_index = agent_formulation_str.split(' + ').index('hh_income_low') - (1*('0' in agent_formulation_str))
         medium_income_index = agent_formulation_str.split(' + ').index('hh_income_medium') - (1*('0' in agent_formulation_str))
         high_income_index = agent_formulation_str.split(' + ').index('hh_income_high')- (1*('0' in agent_formulation_str))
