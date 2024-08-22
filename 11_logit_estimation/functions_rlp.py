@@ -36,135 +36,6 @@ def read_census_data(path):
 
     return df_census
 
-def aggregate_to_market(df, market_ids, product_ids, sales_col):
-    """
-    Aggregate the data to the market level. That is a county across four years. 
-    """
-    # Define a weighted average function
-    wm = lambda x: np.average(x, weights=df.loc[x.index, "veh_count"])
-
-    # Get unique product market combos
-    unique_product_market_combos = len(df[[market_ids, product_ids]].drop_duplicates())
-    unique_products = df[product_ids].nunique()
-    print(f"Aggregating to the market level, with {unique_product_market_combos} unique product market combos")
-    print(f"There are {unique_products} unique products")
-
-    # Define how to aggregate the data
-    # ['prices', 'dollar_per_mile', 'electric', 'phev', 'hybrid', 'diesel', 'log_hp_weight', 'wheelbase', 'doors', 'range_elec', 'make', 'drivetype', 'bodytype']
-    agg_funs = {'make': 'first',
-                'model': 'first',
-                'trim': 'first',
-                sales_col: "sum",
-                "msrp": wm,
-                "dollar_per_mile": wm, 
-                "log_hp_wt": wm, 
-                "wheelbase": wm, 
-                "curb_weight": wm, 
-                "doors": wm, 
-                "drive_type": 'first', 
-                "body_type": 'first', 
-                "fuel": 'first',
-                'electric' : 'first',
-                'phev' : 'first',
-                'hybrid' : 'first',
-                'diesel' : 'first',
-                'range_elec' : wm,
-                'firm_ids':'first',
-                'fed_credit':'first'}
-    
-    vars = list(agg_funs.keys())
-    
-    output = df[[market_ids, product_ids]+vars].groupby([market_ids, product_ids]).agg(agg_funs).reset_index()
-
-
-    # Get sales at the market level
-    # sales_per_market = df[[market_ids, product_ids, sales_col]].groupby([market_ids, product_ids]).agg({sales_col: "sum"}).reset_index()
-
-    # Merge back in the vehicle characteristics
-    # df = df.drop_duplicates(subset = [product_ids])
-    # df = df.drop(columns = ["report_year", "report_month"]+[market_ids,sales_col])
-    # sales_per_market = sales_per_market.merge(df, on = [product_ids], how = "left")
-
-    # Check
-    # assert(unique_product_market_combos == len(sales_per_market)), "Aggregation did not work correctly"
-
-    return output
-
-
-def match_makes_models(df1, df2, match_on = ["make", "model"]):
-    df1_old = df1.copy()
-    df2_old = df2.copy()
-
-    df2 = df2[match_on].drop_duplicates()
-
-    # Keep only the makes and models in df1 that are in df2
-    df1 = df1.merge(df2, on = match_on, how = "inner")
-
-    return df1
-
-
-def drop_uncommon_products(df, mkt_ids, num):
-    """
-    Drops products that do not occur in a large number of counties across the sample.
-    """
-
-    # Get the number of counties each product occurs in
-    vins_counties = df[["vin_pattern", mkt_ids]].drop_duplicates()
-    vins_counties = vins_counties.groupby("vin_pattern").size().reset_index(name = 'count').sort_values(by = "count", ascending = False)
-
-    # Mark the products that occur in more than 7 counties
-    vins_counties["keep"] = vins_counties["count"] >= num
-
-    # Record number in less than 7 counties
-    uncommon_products = vins_counties.loc[vins_counties["count"] < num, "vin_pattern"].nunique()
-    common_products = vins_counties.loc[vins_counties["count"] >= num, "vin_pattern"].nunique()
-    print(f"Found {common_products} / {uncommon_products + common_products} products that occur in at least 7 counties")
-    
-    # Merge back in
-    df = df.merge(vins_counties[["vin_pattern", "keep"]], on = "vin_pattern", how = "left")
-    num_sales_dropped = df[df["keep"] == False]["veh_count"].sum()
-    print(f"Dropping {uncommon_products} products and {num_sales_dropped} sales for VINs observed in less than 7 counties.")
-
-    df = df.loc[df["keep"],:]
-    df = df.drop(columns = ["keep"])
-
-    return df
-
-def normalize_markets(df, mkt_ids, num = 3):
-    """
-    Get the makes and models that occur in most model years.
-    NOTE: Every VIN pattern is only available in a single model year, so we use make model trim as our product IDs.
-    """
-    # Set product IDs
-    product_ids = ["product_ids"]
-
-    # Get the number of model years each make, model, trim occurs in
-    makes_models_my = df[[mkt_ids]+product_ids].drop_duplicates()
-    makes_models = makes_models_my.groupby(product_ids).size().reset_index(name = 'product_count').sort_values(by = "product_count", ascending = False)
-
-    # Get the sales per make, model, trim
-    makes_models_sales = df.groupby(product_ids).agg({"veh_count": "sum"}).reset_index()
-    makes_models = makes_models.merge(makes_models_sales, on = product_ids, how = "left")
-
-    makes_models.loc[makes_models["product_count"] >= num, "keep"] = 1
-    makes_models.loc[makes_models["product_count"] < num, "keep"] = 0
-
-    # Merge back in
-    df = df.merge(makes_models[product_ids+["keep"]], on = product_ids, how = "left")
-
-    # Record what we dropped
-    num_sales_dropped = df[df["keep"] == 0]["veh_count"].sum()
-    num_makes_models_dropped = df[df["keep"] == 0][["make", "model", "trim"]].drop_duplicates().shape[0]
-    print(f"Dropping {num_sales_dropped} sales for makes and models observed in less than {num} model years.")
-    print(f"Dropping {num_makes_models_dropped} makes and models observed in less than {num} model years.")
-
-    # Drop and clean up
-    df = df.loc[df["keep"] == 1, :]
-    df = df.drop(columns = ["keep"])
-
-    return df
-
-
 
 def merge_vin_census(vin_data,census_data, mkt_ids = "model_year"):
     """
@@ -203,12 +74,6 @@ def clean_market_data(mkt_data, mkt_ids):
     # drop observations with missing data
     mkt_data = mkt_data.dropna(subset=['tot_HH','dollar_per_mile','curb_weight','drive_type']).reset_index(drop=True)
 
-    # A product ID is a combination of make, model, and trim
-    # mkt_data['product_ids'] = mkt_data['make'] + "_" + mkt_data['model'] + "_" +  mkt_data['trim']
-
-    # Create product IDs
-    # mkt_data['product_ids'] = mkt_data['make']+"_"+mkt_data['model']+"_"+mkt_data['trim']
-
     # shift dollar per mile to dollar/100 mile
     mkt_data.dollar_per_mile*=100
 
@@ -230,31 +95,13 @@ def clean_market_data(mkt_data, mkt_ids):
     # calculate each vehicle share
     mkt_data['shares'] = mkt_data['veh_count']/mkt_data.tot_HH
 
-    # drop observations with market share below the 5th percentile
-    # mkt_data = mkt_data.loc[mkt_data.shares > np.percentile(mkt_data.shares,5)].reset_index(drop = True)
-
-    # Create market id for pyblp
-    # mkt_data["market_ids"] = mkt_data[mkt_ids]
-
     # Get prices 
     print("Calculating prices")
     mkt_data['prices'] = mkt_data.msrp - mkt_data.fed_credit - mkt_data.state_incentive
-    # mkt_data['prices'] = mkt_data.msrp
-
-    # mkt_data['time_trend'] = mkt_data.model_year - 2013
 
     # define ice indicator
     mkt_data['ice'] = 1
     mkt_data.loc[mkt_data.fuel.isin(['electric','PHEV']),'ice'] = 0
-
-    # define ice mpg
-    if False:
-        mkt_data['mpg_ice'] = 0
-        mkt_data.loc[mkt_data.ice == 1,'mpg_ice'] = mkt_data.loc[mkt_data.ice == 1,'combined_mpg2008']
-        mkt_data['gpm_ice'] = 0
-        mkt_data.loc[mkt_data.ice == 1,'gpm_ice'] = 1/mkt_data.loc[mkt_data.ice == 1,'combined_mpg2008']
-        mkt_data['log_mpg_ice'] = 0
-        mkt_data.loc[mkt_data.ice == 1,'log_mpg_ice'] = np.log(mkt_data.loc[mkt_data.ice == 1,'combined_mpg2008'])
 
     # add clustering id so standard errors can be clustered at product level
     mkt_data['clustering_ids'] = mkt_data.product_ids

@@ -135,69 +135,6 @@ def hist_plot_elasticities(elasticities_matrix, indices = None, labels = None, p
 
 
 
-
-
-############################################################################################################
-# Get elasticities for New Haven, along with indices for EVs and non-EVs, and plot
-# nhv_elasticities, indexes = get_elasticities_market(results, "NEW HAVEN_2022", variable = None, further_indices= [lambda x: x.electric == 1, lambda x: x.electric == 0])
-# hist_plot_elasticities(nhv_elasticities, [indexes[0], indexes[1]], ["EVs", "Non-EVs"])
-
-# Get elasticities for New Haven, along with indices for EVs and non-EVs, for dollars per mile
-# nhv_elasticities_dpm, indexes_dpm = get_elasticities_market(results, "NEW HAVEN_2022", variable = "dollar_per_mile", further_indices= [lambda x: x.electric == 1, lambda x: x.electric == 0])
-# hist_plot_elasticities(nhv_elasticities_dpm, [indexes_dpm[0], indexes_dpm[1]], ["EVs", "Non-EVs"])
-
-# Now we want to extract specific models.
-if False:
-    makes_models_trims = [["Tesla", "Model-3", "Long Range"], ["Tesla", "Model-Y", "Long Range"],["Chevrolet", "Bolt-Euv", "Premier"],
-                        ["Acura", "Mdx", "SH-AWD w/Tech"], ["Toyota", "Rav4-Prime", "SE"], ["Ram", "Ram-Pickup-1500", "Big Horn"], 
-                        ["Toyota", "Tacoma", "SR V6"], ["Jeep", "Wrangler-Unlimited", "Sahara 4xe"]]
-
-    funs = [lambda x, y=y: ((x.make==y[0])&(x.model==y[1])&(x.trim==y[2])) for y in makes_models_trims]
-    nhv_elasticities, make_indices = get_elasticities_market(results, "NEW HAVEN_2022", variable = None, further_indices= funs)
-
-    # Make into table
-    desired_indices = np.reshape(np.where(np.sum(make_indices, axis = 0)), -1)
-    elasticities = pd.DataFrame(nhv_elasticities, columns = np.arange(0, len(nhv_elasticities)))
-    mat = elasticities.loc[desired_indices, desired_indices]
-    mat.index = [makes_modes_trims[0]+" "+makes_modes_trims[1]+" "+makes_modes_trims[2] for makes_modes_trims in makes_models_trims]
-    mat.columns = mat.index
-    mat=mat.reset_index().rename(columns = {"index": "Model"})
-    mat.columns = ["\multicolumn{1}{m{2cm}}{\centering "+str(x) + "}" for x in mat.columns]
-
-    lat_str = mat.to_latex(index = False, 
-                    float_format="%.4f",
-                    formatters = {mat.columns[0]:lambda x: "\multicolumn{1}{m{2.5cm}}{\centering "+x+"}"})
-
-    lat_str = re.sub(r'(toprule|midrule|bottomrule)', r'hline', lat_str)
-    lat_str = re.sub(r'\\\\', r'\\\\[0.4cm]', lat_str)
-    print(lat_str)
-
-
-############################################################################################################
-# Get elasticities for another market using the new functionality we've discovered
-if False:
-    elasticities_21 = results.compute_elasticities("prices", market_id = "NEW HAVEN_2021")
-    elasticities_21 = pd.DataFrame(elasticities_21, columns = np.arange(0, len(elasticities_21)))
-    estimation_data["column header"] = estimation_data["make"]+" "+estimation_data["model"]+" "+estimation_data["trim"]
-    elasticities_21.index = estimation_data.loc[estimation_data["market_ids"] == "NEW HAVEN_2021", "column header"]
-    elasticities_21.columns = elasticities_21.index
-
-    wanted_cols = ["Tesla Model-3 Long Range", "Tesla Model-Y Long Range", "Chevrolet Bolt-Euv Premier", "Acura Mdx SH-AWD w/Tech", "Toyota Rav4-Prime SE", "Ram Ram-Pickup-1500 Big Horn", "Toyota Tacoma SR V6", "Jeep Wrangler-Unlimited Sahara 4xe"]
-
-    elasticities_21 = elasticities_21.loc[wanted_cols, wanted_cols]
-
-
-    mat = elasticities_21
-    mat=mat.reset_index().rename(columns = {"index": "Model"})
-    mat.columns = ["\multicolumn{1}{m{2cm}}{\centering "+str(x) + "}" for x in mat.columns]
-    lat_str = mat.to_latex(index = False,
-                        float_format="%.4f",
-                        formatters = {mat.columns[0]:lambda x: "\multicolumn{1}{m{2.5cm}}{\centering "+x+"}"})
-    lat_str = re.sub(r'(toprule|midrule|bottomrule)', r'hline', lat_str)
-    lat_str = re.sub(r'\\\\', r'\\\\[0.4cm]', lat_str)
-    print(lat_str)
-
-
 ############################################################################################################
 # Get elasticities for markets
 el_2021 = results.compute_elasticities("prices", market_id = "NEW HAVEN_2021")

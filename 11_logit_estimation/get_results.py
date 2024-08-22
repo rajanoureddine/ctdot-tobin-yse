@@ -6,27 +6,26 @@ from pathlib import Path
 import pickle
 import re
 
-##### Get data dir
-data_dir = Path().resolve().parent / "Documents" / "tobin_working_data" / "outputs"
 
-#### Load object
-with open(data_dir / "outputs_county_model_year_0730-1327" / "outputs_rand_coeffs_county_model_year_0730-1327_agent.pkl", "rb") as f:
-    results1 = pickle.load(f)
+## Define function
+def get_df(results_object):
+    df_rand_coeffs = pd.DataFrame({'param':results_object.beta_labels,
+                                    'value':results_object.beta.flatten(),
+                                    'se': results_object.beta_se.flatten()})
+    df_sigma = pd.DataFrame({'param': ['sigma_' + s for s in results_object.sigma_labels],
+                                    'value': np.diagonal(results_object.sigma).flatten(),
+                                    'se': np.diagonal(results_object.sigma_se).flatten()})
+    df_pi = pd.DataFrame({'param': ['pi_' +a + "_" + s for a in results_object.sigma_labels for s in results_object.pi_labels],
+                                    'value': results_object.pi.flatten(),
+                                    'se': results_object.pi_se.flatten()})
 
+    df_results = pd.concat([df_rand_coeffs,df_sigma, df_pi],ignore_index=True)
 
-df_rand_coeffs = pd.DataFrame({'param':results1.beta_labels,
-                                'value':results1.beta.flatten(),
-                                'se': results1.beta_se.flatten()})
-df_sigma = pd.DataFrame({'param': ['sigma_' + s for s in results1.sigma_labels],
-                                'value': np.diagonal(results1.sigma).flatten(),
-                                'se': np.diagonal(results1.sigma_se).flatten()})
-df_pi = pd.DataFrame({'param': ['pi_' +a + "_" + s for a in results1.sigma_labels for s in results1.pi_labels],
-                                'value': results1.pi.flatten(),
-                                'se': results1.pi_se.flatten()})
+    return df_results
 
-df_results = pd.concat([df_rand_coeffs,df_sigma, df_pi],ignore_index=True)
-
-lat = df_results.to_latex(index = False, float_format="%.4f")
+# Function to simplify and print
+def print_simple(df):
+    print(df.loc[~df['param'].str.contains("'"), :])
 
 # Function for latex tables:
 def make_latex_table_nice(df):
@@ -38,6 +37,14 @@ def make_latex_table_nice(df):
     lat_str = re.sub(r'_', ' ', lat_str)
     print(lat_str)
 
-make_latex_table_nice(df_results)
+if __name__ == "__main__":
+    ##### Get data dir
+    data_dir = Path().resolve().parent / "Documents" / "tobin_working_data" / "outputs"
 
-print("a")
+    #### Load object
+    with open(data_dir / "outputs_county_model_year_0730-1327" / "outputs_rand_coeffs_county_model_year_0730-1327_agent.pkl", "rb") as f:
+        results1 = pickle.load(f)
+
+    df_results = get_df(results1)
+    print_simple(df_results)
+    make_latex_table_nice(df_results)

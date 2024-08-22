@@ -12,6 +12,7 @@ import pathlib
 from scipy.optimize import minimize
 import platform
 from time import sleep
+from get_results import get_df, print_simple, make_latex_table_nice
 
 from linearmodels.iv import IV2SLS # this is to check IV results
 
@@ -27,26 +28,18 @@ pyblp.options.verbose = True
 
 ############################################################################################################
 # Settings
-version = "CONNECTICUT"
 model = 'logit'
 integ = 'gauss'
-dynamic = False
-incl_2021 = True
-# rlp_market = 'model_year'
 rlp_market ='county_model_year'
 date_time = time.strftime("%m%d-%H%M")
 zms_replaced_with = 0.01
 
 ############################################################################################################
 # Set up main paths and directories
-if platform.platform()[0:5] == 'macOS':
-    on_cluster = False
-    cd = pathlib.Path().resolve().parent
-    str_project = cd / "Documents" 
-elif platform.platform()[0:5] == 'Linux':
-    on_cluster = True
-    cd = pathlib.Path().resolve()
-    str_project = cd.parent.parent / "rn_home" / "data"
+on_cluster = False
+cd = pathlib.Path().resolve().parent
+str_project = cd / "Documents" 
+
 
 # Set up sub-directories
 str_data = str_project / "tobin_working_data"
@@ -55,35 +48,11 @@ str_sales_vin_characteristic = str_rlp / "rlp_with_dollar_per_mile.csv"
 output_folder = str_project / str_data / "outputs"
 str_mapping = str_rlp / "brand_to_oem_generated.csv"
 estimation_test = str_data / "estimation_data_test"
-# New 05/13/2023 - #Dropped anything with less than 100 sales
-# str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240513_122046_no_lease_zms.csv"
-# New 04/13/2023 - Dropped anything with less than 50 sales
-# str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240513_142237_no_lease_zms.csv"
-# New 05/23/2024 - Dropped anything with less than 50 sales and added incentives
-# str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240523_133138_no_lease_zms.csv"
-str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240523_154006_no_lease_zms.csv" # threshold to 20
-str_micro_moments = str_data / "micro_moment_data" / "micro_moments_20240729.csv"
+str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240822_163435_no_lease_zms.csv" 
+str_micro_moments = str_data / "micro_moment_data" / "micro_moments_20240729.csv" # Most recent
 str_charging_density = str_data / "charging_stations_output" / "charging_stations_extended.csv"
 str_pop_density = str_data / "other_data" / "population_by_year_counties.csv"
-
-if False:
-    a = 1
-    # NEW
-    # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240415_170934_no_lease_zms.csv" # NO LEASES + COUNTY + ZMS
-    # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240416_141637_inc_leases_zms.csv" # LEASES + COUNTY + ZMS
-    # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240416_141550_inc_leases.csv" # LEASES + COUNTY
-    # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240413_064557_no_lease.csv" # NO LEASES + COUNTY
-
-    # OLD
-    # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_20240413_064557_no_lease.csv" # NO LEASES
-    # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240415_170934_no_lease_zms.csv" # NO LEASES + COUNTY + ZMS
-    # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240416_141637_inc_leases_zms.csv" # LEASES + COUNTY + ZMS
-    # str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_20240411_183046.csv"
-
 str_agent_data = str_data / "ipums_data" / "agent_data_processed_2000.csv"
-
-# Get updated W
-w_mat_str = output_folder / "outputs_county_model_year_0601-0700" / "outputs_rand_coeffs_county_model_year_0601-0700.pkl"
 
 # Create subfolder for the outputs
 output_subfolder = output_folder / f'outputs_{rlp_market}_{date_time}'
@@ -120,47 +89,13 @@ Replace ZMS with: {zms_replaced_with}
 We run a random coefficients model with no agent data, where we include incentives in the RLP data.
 """
 
-description = input("Please provide a description of what this run is doing: ")
-
-if not description:
-    raise ValueError("Please provide a description of the estimation")
-
-logging.info("\n"+ description + "\n----------------------------------------------------------")
+logging.info("\n"+ description_template + "\n----------------------------------------------------------")
 ############################################################################################################
 # Helper functions
 def remove_makes(df, makes):
     for make in makes:
         df = df[df["make"]!=make]
     return df
-
-# We prepare the Experian data for estimation
-def prepare_experian_data(makes_to_remove = None):
-    # read in VIN data - file of approx 100000 rows, including car characteristics
-    exp_vin_data = exp_functions.read_vin_data(str_project,str_data,version,dynamic)
-
-    # read in census data
-    exp_census_data = exp_functions.read_census_data(str_project,str_data,version)
-
-    # haircut first and potentially last market based on missing addl data - alters the census data
-    exp_census_data = exp_functions.haircut_interpolate_census(str_project,str_data,exp_census_data,incl_2021)
-
-    # Join
-    exp_mkt_data = exp_functions.merge_vin_census(exp_vin_data,exp_census_data,version,dynamic)
-
-    # Various cleaning functions, add a time trend, add a clustering ID for standard errors
-    exp_mkt_data = exp_functions.clean_market_data(exp_mkt_data,version)
-
-    # calculate outside good share
-    exp_mkt_data = exp_functions.calc_outside_good(exp_mkt_data,version)
-
-    # generate PyBLP instruments
-    exp_mkt_data = exp_functions.generate_pyblp_instruments(exp_mkt_data)
-
-    # remove makes
-    if makes_to_remove:
-        exp_mkt_data = remove_makes(exp_mkt_data, makes_to_remove)
-
-    return exp_mkt_data
 
 # We now prepare the RLP data, aiming to make it as similar as possible to the Experian data
 def prepare_rlp_data(df, pop_density_path, charging_data_path, makes_to_remove = None, mkt_def = "model_year", year_to_drop = None, zms_replaced_with = 0.001):
@@ -239,11 +174,12 @@ def run_rc_logit_model(rlp_df,
     if agent_data is not None:
         logging.info(f"Agent Data used: {str_agent_data}")
 
-    # Set up the estimation hyperparameters
+    # Set up the estimation hyperparameters. We use monte-carlo integration, with 2000 agents
+    # Two-step GMM, and set sensitivity. These can be changed to test robustness
     integ = 'monte_carlo'
-    n_agent = 2000
+    n_agent = 750
     gmm_rounds = '2s'
-    sensitivity = 1e-1 # Increased this significantly. When we use gtol, this is the gradient tolerance. ftol is function tolerance. 
+    sensitivity = 1e-2 # Very high sensitivity - this ensures the optimization doesn't take too long. 
 
     # Save the market data used for the estimation - to ensure that we can replicate in future if required
     rlp_df.to_csv(estimation_data_folder / f'rc_mkt_data_{rlp_market}_{date_time}.csv',index = False)
@@ -253,7 +189,7 @@ def run_rc_logit_model(rlp_df,
 
     # Set up the linear (X1) and non-linear (X2) product formulation
     X1_formulation_str = 'dollar_per_mile + electric + phev + hybrid + diesel + wheelbase + log_hp_weight + doors + range_elec + C(make) + C(drivetype) + C(bodytype)'
-    X2_formulation_str = '1 + prices'
+    X2_formulation_str = '1 + broad_ev_nohybrid'
 
     # If prices is in X2, do not include it in X1
     if 'prices' in X2_formulation_str:
@@ -273,9 +209,9 @@ def run_rc_logit_model(rlp_df,
     # Set up Sigma - this is random heterogeneity that is unrelated to agent data
     # Sigma is a K2 x K2 matrix, where K2 is the number of non-linear product characteristics
     K2 = len(X2_formulation_str.split('+')) - (1 * ('0' in X2_formulation_str))
-    sigma_guess = np.zeros((K2,K2))  # Setting guess to zero means these will be fixed at zero
-    sigma_lb = np.zeros((K2, K2))
-    sigma_ub = np.zeros((K2, K2))
+    sigma_guess = np.ones((K2,K2))* 0.5  # Setting guess to zero means these will be fixed at zero
+    sigma_lb = np.ones((K2, K2)) * -3
+    sigma_ub = np.ones((K2, K2)) * 3
     
     # If we are using agent data, set up the agent formulation
     if agent_data is not None:
@@ -337,14 +273,15 @@ def run_rc_logit_model(rlp_df,
 
         # Get index of broad EV data
         if 'broad_ev_no_hybrid' in X2_formulation_str.split(' + '):
-            broad_ev_index = X2_formulation_str.split(' + ').index('broad_ev_no_hybrid')
+            broad_ev_index = X2_formulation_str.split(' + ').index('broad_ev_nohybrid')
         if 'prices' in X2_formulation_str.split(' + '):
             prices_index = X2_formulation_str.split(' + ').index('prices')
         
         # Get index of income category dummies in the agent data
-        low_income_index = agent_formulation_str.split(' + ').index('hh_income_low') - (1*('0' in agent_formulation_str))
-        medium_income_index = agent_formulation_str.split(' + ').index('hh_income_medium') - (1*('0' in agent_formulation_str))
-        high_income_index = agent_formulation_str.split(' + ').index('hh_income_high')- (1*('0' in agent_formulation_str))
+        if agent_data is not None:
+            low_income_index = agent_formulation_str.split(' + ').index('hh_income_low') - (1*('0' in agent_formulation_str))
+            medium_income_index = agent_formulation_str.split(' + ').index('hh_income_medium') - (1*('0' in agent_formulation_str))
+            high_income_index = agent_formulation_str.split(' + ').index('hh_income_high')- (1*('0' in agent_formulation_str))
 
         # Define the anonymous functions for computing the ratio and its gradient
         compute_ratio = lambda v: v[0] / v[1] 
@@ -358,6 +295,7 @@ def run_rc_logit_model(rlp_df,
                 compute_weights=lambda t, p, a: np.ones((n_agent, p.size, p.size))
             )
         else:
+            # If second choices are not included, then the weight matrix has one less dimension
             micro_dataset = pyblp.MicroDataset(
                 name = "InMoment", # Observations for all years, filtered for CT only
                 observations = 69528, # Total observations in 2018-2022 for New England
@@ -366,6 +304,8 @@ def run_rc_logit_model(rlp_df,
         micro_moments = []
 
         if "second_choices" in micro_moments_to_include:
+            broad_ev_index = X2_formulation_str.split(' + ').index('broad_ev_nohybrid')
+
             # Define the first MicroPart for first and second choices being an EV
             sc_ev_part = pyblp.MicroPart(
                 name="E[broad_ev_1 * broad_ev_2]",
@@ -380,6 +320,7 @@ def run_rc_logit_model(rlp_df,
                 compute_values=lambda t,p,a: np.einsum('i,j,k->ijk',np.ones(n_agent), p.X2[:, broad_ev_index], p.X2[:, 0])
             )
 
+            # Calculate the micro-moment for second choices
             sc_micro_moment = pyblp.MicroMoment(name="E[broad_ev_2 | broad_ev_1]", 
                                 value=float(micro_statistic_val),
                                 parts=[sc_ev_part, ev_part],
@@ -431,6 +372,7 @@ def run_rc_logit_model(rlp_df,
         
             micro_moments = micro_moments + [medinc_micro_moment, highinc_micro_moment]
             
+        # This is the least well-defined micro-moment
         if "income_specific_price_sensitivities" in micro_moments_to_include:
             # Define micro-moments used to pin-down income-specific price sensitivities
             low_inc_spec_numerator = pyblp.MicroPart(
@@ -514,44 +456,19 @@ def run_rc_logit_model(rlp_df,
         else:
             results1 = mc_problem.solve(sigma=sigma_guess,sigma_bounds=(sigma_lb,sigma_ub), optimization=optim,iteration=iter, method = gmm_rounds)
 
-    if True:
-        results1.to_pickle(subfolder / f'outputs_rand_coeffs_{rlp_market}_{date_time}_agent.pkl')
+    # Pickle the results
+    results1.to_pickle(subfolder / f'outputs_rand_coeffs_{rlp_market}_{date_time}_agent.pkl')
 
+    # Print the simplified results
+    logging.info(f"Results: {results1}")
+    print_simple(get_df(results1))
+    make_latex_table_nice(get_df(results1))
 
-    if False:
-    # save to CSV
-        if agent_data is not None:
-            df_rand_coeffs.to_csv(subfolder / f'outputs_rand_coeffs_{rlp_market}_{date_time}_agent.csv',index = False)
-            # Also pickle results1
-            with open(subfolder / f'outputs_rand_coeffs_{rlp_market}_{date_time}_agent.pkl', 'wb') as f:
-                pickle.dump(results1, f)
-        else:
-            df_rand_coeffs.to_csv(subfolder / f'outputs_rand_coeffs_{rlp_market}_{date_time}.csv',index = False)
-            # Also pickle results1
-            with open(subfolder / f'outputs_rand_coeffs_{rlp_market}_{date_time}.pkl', 'wb') as f:
-                pickle.dump(results1, f)
-
-        # save results
-        df_rand_coeffs = pd.DataFrame({'param':results1.beta_labels,
-                                'value':results1.beta.flatten(),
-                                'se': results1.beta_se.flatten()})
-        df_sigma = pd.DataFrame({'param': ['sigma_' + s for s in results1.sigma_labels],
-                                'value': np.diagonal(results1.sigma).flatten(),
-                                'se': np.diagonal(results1.sigma_se).flatten()})
-        if agent_data is not None:
-            df_pi = pd.DataFrame({'param': ['pi_' + s for s in results1.pi_labels],
-                                'value': results1.pi.flatten(),
-                                'se': results1.pi_se.flatten()})
-        df_rand_coeffs = pd.concat([df_rand_coeffs,df_sigma],ignore_index=True)
-        if agent_data is not None:
-            df_rand_coeffs = pd.concat([df_rand_coeffs,df_pi],ignore_index=True)
 
 
 
 ############################################################################################################
 # Prepare the data
-# Experian
-exp_mkt_data = prepare_experian_data(makes_to_remove=["Polestar", "Smart", "Lotus", "Scion", "Maserati"])
 
 # RLP data
 logging.log(logging.INFO, f"Reading in RLP data from {str_rlp_new}")
@@ -567,17 +484,22 @@ agent_data = pd.read_csv(str_agent_data)
 agent_data = agent_data.loc[(agent_data["year"]>2017)&(agent_data["year"]!=2023)].reset_index(drop=True)
 
 ############################################################################################################
-# Run the random coefficients logit model with micro moments
-# run_rc_logit_model(rlp_mkt_data, output_subfolder, estimation_data_subfolder, use_micro_moments = True)
+# 0: Run the random coefficients logit model, with no agent data, no micro-moments, etc.
+# Note: Before running this, set Sigma guess to ones, and Sigma bounds to -100, 100
+# run_rc_logit_model(rlp_mkt_data, output_subfolder, estimation_data_subfolder)
+
+# 1: Run the random coefficients logit model with micro moments
+# Note: Make sure to include a '1' (or constant) in the non-linear (X2) formulation
+run_rc_logit_model(rlp_mkt_data, output_subfolder, estimation_data_subfolder, use_micro_moments = True, micro_moments_to_include=["second_choices"])
 
 # Run the random coefficients logit model without micro moments, with agent data
+# Note that the agent formulation must be updated as needed
 # run_rc_logit_model(rlp_mkt_data, output_subfolder, estimation_data_subfolder, use_micro_moments = False, agent_data=agent_data)
 
 # Run the random coefficients logit model with micro moments, with agent data
-run_rc_logit_model(rlp_mkt_data, output_subfolder, estimation_data_subfolder, use_micro_moments = True, agent_data=agent_data, 
-                   micro_moments_to_include=["income_specific_price_sensitivities"])
+# run_rc_logit_model(rlp_mkt_data, output_subfolder, estimation_data_subfolder, use_micro_moments = True, agent_data=agent_data, 
+                   # micro_moments_to_include=["income_specific_price_sensitivities"])
 
-# Run the logit model
-# run_logit_model(exp_mkt_data, rlp_mkt_data, output_subfolder, estimation_data_subfolder, myear = "all_years")
+
 
 
