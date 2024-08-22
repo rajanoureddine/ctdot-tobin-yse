@@ -1,3 +1,14 @@
+""" Note: This code was last run for outputs_county_model_year_0822-2233
+X1 Formulation = 0 + prices + dollar_per_mile + electric + phev 
+                + hybrid + diesel + wheelbase + log_hp_weight + doors 
+                + range_elec + C(make) + C(drivetype) + C(bodytype)
+X2 Formulation = 1+broad_ev_nohybrid
+No agent formulation.
+Second choice micro-moments were used. 
+""" 
+
+
+
 ############################################################################################################
 # Import necessary packages
 import numpy as np
@@ -49,7 +60,7 @@ output_folder = str_project / str_data / "outputs"
 str_mapping = str_rlp / "brand_to_oem_generated.csv"
 estimation_test = str_data / "estimation_data_test"
 str_rlp_new = str_rlp / "rlp_with_dollar_per_mile_replaced_myear_county_20240822_163435_no_lease_zms.csv" 
-str_micro_moments = str_data / "micro_moment_data" / "micro_moments_20240729.csv" # Most recent
+str_micro_moments = str_data / "micro_moment_data" / "micro_moments_20240729.csv"
 str_charging_density = str_data / "charging_stations_output" / "charging_stations_extended.csv"
 str_pop_density = str_data / "other_data" / "population_by_year_counties.csv"
 str_agent_data = str_data / "ipums_data" / "agent_data_processed_2000.csv"
@@ -177,9 +188,9 @@ def run_rc_logit_model(rlp_df,
     # Set up the estimation hyperparameters. We use monte-carlo integration, with 2000 agents
     # Two-step GMM, and set sensitivity. These can be changed to test robustness
     integ = 'monte_carlo'
-    n_agent = 750
+    n_agent = 1000
     gmm_rounds = '2s'
-    sensitivity = 1e-2 # Very high sensitivity - this ensures the optimization doesn't take too long. 
+    sensitivity = 1e-4 # Very high sensitivity - this ensures the optimization doesn't take too long. 
 
     # Save the market data used for the estimation - to ensure that we can replicate in future if required
     rlp_df.to_csv(estimation_data_folder / f'rc_mkt_data_{rlp_market}_{date_time}.csv',index = False)
@@ -209,9 +220,9 @@ def run_rc_logit_model(rlp_df,
     # Set up Sigma - this is random heterogeneity that is unrelated to agent data
     # Sigma is a K2 x K2 matrix, where K2 is the number of non-linear product characteristics
     K2 = len(X2_formulation_str.split('+')) - (1 * ('0' in X2_formulation_str))
-    sigma_guess = np.ones((K2,K2))* 0.5  # Setting guess to zero means these will be fixed at zero
-    sigma_lb = np.ones((K2, K2)) * -3
-    sigma_ub = np.ones((K2, K2)) * 3
+    sigma_guess = np.array([[0.005, 0], [0, 0.005]])# Setting guess to zero means these will be fixed at zero
+    sigma_lb = np.zeros((K2, K2))
+    sigma_ub = np.ones((K2, K2)) * 10
     
     # If we are using agent data, set up the agent formulation
     if agent_data is not None:
@@ -406,17 +417,17 @@ def run_rc_logit_model(rlp_df,
                             compute_values = lambda t, p, a: np.outer(a.demographics[:, high_income_index], 
                                                                     p.X2[:,0]))
             low_inc_spec_moment = pyblp.MicroMoment(name="E[prices | low_income]",
-                            value= 29.76926, # low_inc_spec_value
+                            value= low_inc_spec_value,
                             parts=[low_inc_spec_numerator, low_inc_spec_denom],
                             compute_value=compute_ratio,
                             compute_gradient=compute_ratio_gradient)
             med_inc_spec_moment = pyblp.MicroMoment(name="E[prices | medium_income]",
-                            value= 33.0288, # med_inc_spec_value
+                            value= med_inc_spec_value,
                             parts=[med_inc_spec_numerator, med_inc_spec_denom],
                             compute_value=compute_ratio,
                             compute_gradient=compute_ratio_gradient)
             high_inc_spec_moment = pyblp.MicroMoment(name="E[prices | high_income]",
-                            value= 37.4109, #high_inc_spec_value
+                            value= high_inc_spec_value,
                             parts=[high_inc_spec_numerator, high_inc_spec_denom],
                             compute_value=compute_ratio,
                             compute_gradient=compute_ratio_gradient)
@@ -465,8 +476,6 @@ def run_rc_logit_model(rlp_df,
     make_latex_table_nice(get_df(results1))
 
 
-
-
 ############################################################################################################
 # Prepare the data
 
@@ -499,7 +508,4 @@ run_rc_logit_model(rlp_mkt_data, output_subfolder, estimation_data_subfolder, us
 # Run the random coefficients logit model with micro moments, with agent data
 # run_rc_logit_model(rlp_mkt_data, output_subfolder, estimation_data_subfolder, use_micro_moments = True, agent_data=agent_data, 
                    # micro_moments_to_include=["income_specific_price_sensitivities"])
-
-
-
 
